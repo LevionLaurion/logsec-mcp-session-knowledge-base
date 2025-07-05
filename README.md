@@ -35,6 +35,21 @@ python tests/test_core_v3.py
 # Configure Claude Desktop (see Installation Guide)
 ```
 
+## ⚠️ **Important Privacy Notice**
+
+**Desktop Commander Integration**: LogSec analyzes Desktop Commander logs to provide workspace context. Be aware that Desktop Commander logs all file operations to:
+```
+C:\Users\[Username]\.claude-server-commander-logs\
+```
+
+**Privacy Implications:**
+- File paths and search queries are logged in plain text
+- Logs persist indefinitely and are not encrypted
+- Consider using generic project names for sensitive work
+- Regularly clean the log directory to maintain privacy
+
+See [SECURITY.md](SECURITY.md) for detailed privacy recommendations and mitigation strategies.
+
 ## ✨ **Production Features**
 
 ### 🎯 **Two-Mode Knowledge Loading**
