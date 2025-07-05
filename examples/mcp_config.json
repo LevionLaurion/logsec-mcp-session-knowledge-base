@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "logsec": {
+      "command": "python",
+      "args": ["C:\\LogSec\\logsec_core_v3.py"],
+      "name": "LogSec Knowledge Base",
+      "description": "MCP Session Knowledge Base for seamless project continuity",
+      "version": "3.0.0",
+      "capabilities": {
+        "tools": ["lo_load", "lo_save", "lo_cont"],
+        "features": [
+          "Auto-tagging",
+          "Knowledge type classification", 
+          "Tier 2 README system",
+          "Continuation parsing"
+        ]
+      }
+    }
+  }
+}

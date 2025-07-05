@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# Data folders (should not be in git)
+data/
+database/
+sessions/
+knowledge/
+manual_save/
+
+# Logs
+*.log
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test outputs
+test_mcp_input.txt
+*.test
+
+# Old databases
+*.db
+logion_brain.db
+
+# Temp files
+*.tmp
+*.bak
+*~
+
+# Build
+build/
+dist/
+*.egg-info/
+
+# Archives
+archive/
