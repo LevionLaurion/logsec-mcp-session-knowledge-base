@@ -201,7 +201,7 @@ python tests/test_core_v3.py
 - 🏗️ [Implementation Summary](docs/IMPLEMENTATION_PLAN.md) - Architecture & results
 - 💾 [Database Architecture](docs/DATABASE_ARCHITECTURE.md) - Technical deep dive
 - 🔧 [Developer Reference](docs/DEVELOPER_REFERENCE.md) - Complete API documentation  
-- 🧠 [Concept & Realization](docs/LOGSEC_3.0_KONZEPT.md) - Design philosophy (German)
+- 🧠 [Concept & Implementation](docs/LOGSEC_3.0_CONCEPT.md) - Design philosophy & realization
 - 📁 [Workspace Integration](docs/PHASE_3_WORKSPACE_CONTEXT.md) - Desktop Commander features
 
 ## 🎯 **Production Use Cases**
