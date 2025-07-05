@@ -40,30 +40,36 @@ TODO: Outstanding tasks
 CONTEXT: Additional context
 ```
 
-### 📚 **Tier 2 README System**
-Persistent project documentation with version tracking.
+### 📚 **Project Isolation**
+Complete separation between different projects with intelligent knowledge management.
 
 ## 📋 Available Commands
 
-### `lo_load(project_name?)`
-Load project knowledge including README and recent sessions.
-
-### `lo_save(content, project_name?, session_id?)`
+### `lo_save(content, project_name, session_id?)`
 Save content with automatic tagging and classification.
+
+### `lo_load(project_name, query?)`
+Load project knowledge - summary mode or vector search mode.
 
 ### `lo_cont(query, language?)`
 Parse continuation context for seamless handoffs.
+
+### `lo_start(project_name)`
+Quick session continuation with workspace context.
 
 ## 🏗️ Architecture
 
 ```
 src/
-├── logsec_core_v3.py    # Main MCP server
-├── modules/             # Feature modules
+├── logsec_core_v3.py        # Main MCP server
+├── modules/                 # Feature modules
 │   ├── extended_auto_tagger.py
-│   └── knowledge_type_classifier.py
-└── core/               # Core components
-    └── continuation_parser.py
+│   ├── knowledge_type_classifier.py
+│   ├── vector_search.py
+│   └── embedding_engine.py
+└── core/                   # Core components
+    ├── continuation_parser.py
+    └── tier2_manager.py
 ```
 
 ## 📦 Installation
@@ -97,13 +103,15 @@ python tests/test_core_v3.py
 ## 📚 Documentation
 
 - [Installation Guide](docs/INSTALLATION_GUIDE.md) - Detailed setup instructions
-- [Phase 1 Complete](docs/PHASE_1_COMPLETE.md) - Development milestones
+- [Project Status](docs/LOGSEC_3.0_STATUS.md) - Current development status
+- [Implementation Plan](docs/IMPLEMENTATION_PLAN.md) - Technical roadmap
 - [Database Architecture](docs/DATABASE_ARCHITECTURE.md) - Technical details
+- [Developer Reference](docs/DEVELOPER_REFERENCE.md) - API documentation
 - [Original Concept](docs/LOGSEC_3.0_KONZEPT.md) - Initial design (German)
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed contribution guidelines.
 
 ## 📄 License & Usage
 
