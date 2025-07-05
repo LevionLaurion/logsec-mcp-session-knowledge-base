@@ -3,9 +3,10 @@
 ## Quick Start
 
 ### 1. Prerequisites
-- Python 3.8+ installed
-- Git (optional, for version control)
-- Claude Desktop (for MCP integration)
+- **Python 3.8+** installed
+- **Git** (optional, for version control)
+- **Claude Desktop** (for MCP integration)
+- **Desktop Commander** (for workspace context features)
 
 ### 2. Installation Steps
 
@@ -15,21 +16,21 @@
 git clone https://github.com/LevionLaurion/logsec-mcp-session-knowledge-base.git LogSec
 cd LogSec
 
-# Or download and extract to C:\LogSec
+# Or download and extract to your preferred location
 ```
 
 #### Step 2: Install Dependencies
 ```bash
-# Run the installation script
+# Windows:
 install_dependencies.bat
 
-# Or manually:
+# Linux/macOS:
 pip install -r requirements.txt
 ```
 
 #### Step 3: Test Installation
 ```bash
-python test_core_v3.py
+python tests/test_core_v3.py
 ```
 
 You should see:
@@ -37,23 +38,102 @@ You should see:
 [SUCCESS] All tests passed! LogSec Core v3 is ready!
 ```
 
-### 3. Claude Desktop Integration
+### 3. Desktop Commander Integration (Required for Workspace Features)
 
-#### Step 1: Locate Claude Config
-Find your Claude Desktop configuration file:
-- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
-- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- Linux: `~/.config/Claude/claude_desktop_config.json`
+**⚠️ Important**: LogSec uses Desktop Commander for workspace context analysis. You need to configure access to Desktop Commander logs.
 
-#### Step 2: Add LogSec MCP Server
-Add this to your `claude_desktop_config.json`:
+#### Enable Desktop Commander in Claude Desktop
+
+Add Desktop Commander to your `claude_desktop_config.json` **before** LogSec:
 
 ```json
 {
   "mcpServers": {
+    "desktop-commander": {
+      "command": "npx",
+      "args": ["-y", "desktop-commander"]
+    },
+    "logsec": {
+      "command": "python", 
+      "args": ["/absolute/path/to/LogSec/src/logsec_core_v3.py"]
+    }
+  }
+}
+```
+
+#### Configure Log Access Permissions
+
+LogSec needs read access to Desktop Commander logs for workspace context:
+
+**Windows:**
+```
+Log Location: C:\Users\[Username]\.claude-server-commander-logs\
+Required: Read permissions to this directory
+```
+
+**macOS:**
+```
+Log Location: ~/.claude-server-commander-logs/
+Required: Read permissions to this directory
+```
+
+**Linux:**
+```
+Log Location: ~/.claude-server-commander-logs/
+Required: Read permissions to this directory
+```
+
+### 4. Claude Desktop MCP Configuration
+
+#### Step 1: Locate Claude Config File
+
+**Windows:**
+```
+%APPDATA%\Claude\claude_desktop_config.json
+```
+
+**macOS:**
+```
+~/Library/Application Support/Claude/claude_desktop_config.json
+```
+
+**Linux:**
+```
+~/.config/Claude/claude_desktop_config.json
+```
+
+#### Step 2: Add LogSec MCP Server
+
+Add LogSec to your `claude_desktop_config.json` with **absolute paths**:
+
+**Windows Example:**
+```json
+{
+  "mcpServers": {
+    "desktop-commander": {
+      "command": "npx",
+      "args": ["-y", "desktop-commander"]
+    },
     "logsec": {
       "command": "python",
-      "args": ["C:\\LogSec\\logsec_core_v3.py"],
+      "args": ["C:\\LogSec\\src\\logsec_core_v3.py"],
+      "env": {}
+    }
+  }
+}
+```
+
+**macOS/Linux Example:**
+```json
+{
+  "mcpServers": {
+    "desktop-commander": {
+      "command": "npx", 
+      "args": ["-y", "desktop-commander"]
+    },
+    "logsec": {
+      "command": "python",
+      "args": ["/home/username/LogSec/src/logsec_core_v3.py"],
       "env": {}
     }
   }
@@ -61,124 +141,213 @@ Add this to your `claude_desktop_config.json`:
 ```
 
 #### Step 3: Restart Claude Desktop
-Close and reopen Claude Desktop to load the MCP server.
 
-### 4. Verify Integration
+Close and reopen Claude Desktop to load both MCP servers.
 
-In Claude, you should now have access to:
-- `lo_load` - Load project knowledge
-- `lo_save` - Save with auto-tagging
-- `lo_cont` - Continue from previous session
+### 5. Verify Complete Integration
 
-Test it:
-```
-lo_load("your_project_name")
+Test all LogSec commands in Claude:
+
+```bash
+# Basic project loading
+lo_load("test_project")
+
+# Save with workspace context
+lo_save("Test content", "test_project")
+
+# Session continuation (requires Desktop Commander logs)
+lo_start("test_project")
+
+# Structured continuation parsing
+lo_cont("""
+STATUS: Testing LogSec installation
+POSITION: Installation guide
+NEXT: Verify all features work
+""")
 ```
 
 ## 📁 Directory Structure
 
 ```
-C:\LogSec\
-├── logsec_core_v3.py      # Main MCP server
-├── database/              # SQLite databases
-│   └── logsec_phase2.db   # Main knowledge base
-├── sessions/              # Saved session files
-├── modules/               # Feature modules
-│   ├── auto_tagger.py
-│   ├── extended_auto_tagger.py
-│   └── knowledge_type_classifier.py
-├── core/                  # Core components
-│   └── continuation_parser.py
-└── utils/                 # Utilities
+LogSec/
+├── src/
+│   ├── logsec_core_v3.py      # Main MCP server
+│   ├── modules/               # Feature modules
+│   └── core/                  # Core components
+├── data/
+│   ├── database/              # SQLite databases
+│   │   └── logsec_phase3.db   # Main knowledge base
+│   └── sessions/              # Saved session files
+├── tests/                     # Test suite
+├── docs/                      # Documentation
+├── requirements.txt           # Dependencies
+└── install_dependencies.bat   # Windows installer
 ```
 
-## 🔧 Configuration
+## 🔧 Advanced Configuration
 
 ### Database Location
-Default: `C:\LogSec\database\logsec_phase2.db`
 
-To change, edit line 66 in `logsec_core_v3.py`:
+**Default Locations:**
+- **Windows**: `C:\LogSec\data\database\logsec_phase3.db`
+- **macOS/Linux**: `~/LogSec/data/database/logsec_phase3.db`
+
+To change, edit `src/logsec_core_v3.py`:
 ```python
-self.db_path = self.base_dir / "database" / "your_database.db"
+self.db_path = Path("your/custom/path/logsec_phase3.db")
 ```
 
 ### Session Storage
-Default: `C:\LogSec\sessions\`
 
-To change, edit line 233 in `logsec_core_v3.py`:
-```python
-session_dir = self.base_dir / "your_sessions_folder"
+**Default Locations:**
+- **Windows**: `C:\LogSec\data\sessions\`
+- **macOS/Linux**: `~/LogSec/data/sessions/`
+
+### Desktop Commander Log Access
+
+LogSec automatically detects Desktop Commander logs at:
+
+**Windows:**
+```
+C:\Users\[Username]\.claude-server-commander-logs\
+```
+
+**macOS/Linux:**
+```
+~/.claude-server-commander-logs/
+```
+
+If logs are in a different location, set environment variable:
+```bash
+export CLAUDE_COMMANDER_LOGS="/custom/path/to/logs"
 ```
 
 ## 🎯 Usage Examples
 
-### Save a Session
+### Basic Project Management
 ```python
-# In Claude:
+# Save project content
 lo_save("""
-# Today's Progress
-- Implemented user authentication
-- Fixed database connection bug
-- Added API endpoints
+# Project Setup Complete
+- Database configured
+- API endpoints ready
+- Tests passing
 """, "my_project")
+
+# Load project overview
+overview = lo_load("my_project")
+
+# Search within project
+results = lo_load("my_project", "API endpoints")
 ```
 
-### Load Project Knowledge
+### Workspace Context Features
 ```python
-# In Claude:
-result = lo_load("my_project")
-# Returns README + recent sessions
-```
+# Quick start with workspace analysis
+context = lo_start("my_project")
+# Analyzes recent Desktop Commander operations
+# Shows files worked on, commands executed, etc.
 
-### Continue from Previous
-```python
-# In Claude:
+# Structured continuation
 lo_cont("""
-STATUS: Authentication complete
-POSITION: Working on user profiles
-NEXT: Add profile picture upload
+STATUS: Implementing user authentication
+POSITION: auth.py:45 - login_handler()
+PROBLEM: Password hashing not working
+TRIED: bcrypt, scrypt implementations
+NEXT: Try argon2 library
 TODO:
-- Image validation
-- Storage backend
-- API endpoint
-CONTEXT: User management system
+- Fix password hashing
+- Add session management
+- Update tests
+CONTEXT: Building secure login system
 """)
 ```
 
 ## 🐛 Troubleshooting
 
-### "Module not found" Error
+### Common Issues
+
+#### "Desktop Commander not found"
+1. Ensure Desktop Commander is installed: `npx -y desktop-commander`
+2. Verify it's in your Claude Desktop config
+3. Check Desktop Commander appears in Claude's MCP server list
+
+#### "Cannot access log files"
+1. Check log directory exists and has read permissions
+2. Verify Desktop Commander is generating logs
+3. For Windows: Ensure user has access to `%USERPROFILE%\.claude-server-commander-logs\`
+
+#### "Module not found" Error
 ```bash
-# Ensure you're in the LogSec directory
-cd C:\LogSec
-python test_core_v3.py
+# Ensure you're in the correct directory
+cd /path/to/LogSec
+python tests/test_core_v3.py
+
+# Check Python path
+python -c "import sys; print(sys.path)"
 ```
 
-### Database Errors
+#### Database Errors
 ```bash
-# Reset database
-rm C:\LogSec\database\logsec_phase2.db
-python test_core_v3.py  # Will recreate
+# Reset database (will lose data!)
+rm data/database/logsec_phase3.db
+python tests/test_core_v3.py  # Will recreate
 ```
 
-### MCP Not Working in Claude
-1. Check config file syntax (valid JSON)
-2. Use absolute paths in config
-3. Restart Claude Desktop
-4. Check Claude logs for errors
+#### MCP Server Not Loading
+1. **Check JSON syntax** in `claude_desktop_config.json`
+2. **Use absolute paths** for all file references
+3. **Restart Claude Desktop** after config changes
+4. **Check Claude Desktop logs** for error messages
+
+### Platform-Specific Issues
+
+#### Windows
+- Use backslashes or double backslashes in paths: `C:\\LogSec\\`
+- Ensure Python is in PATH: `python --version`
+- Use Command Prompt or PowerShell for testing
+
+#### macOS
+- May need to install Xcode Command Line Tools: `xcode-select --install`
+- Use forward slashes in paths: `/Users/username/LogSec/`
+- Check Python 3 is default: `python3 --version`
+
+#### Linux
+- Ensure pip is installed: `sudo apt install python3-pip`
+- May need to use `python3` instead of `python`
+- Check file permissions: `chmod +x install_dependencies.sh`
+
+## 🔍 Verification Checklist
+
+✅ **Python 3.8+ installed and accessible**  
+✅ **LogSec dependencies installed** (`pip install -r requirements.txt`)  
+✅ **Desktop Commander installed** (`npx -y desktop-commander`)  
+✅ **Both MCP servers in Claude Desktop config**  
+✅ **Absolute paths used in configuration**  
+✅ **Claude Desktop restarted after config changes**  
+✅ **Log directory accessible** (`~/.claude-server-commander-logs/`)  
+✅ **All LogSec commands working** (`lo_load`, `lo_save`, `lo_start`, `lo_cont`)  
 
 ## 📚 Further Documentation
 
-- [README.md](README.md) - Project overview
-- [PHASE_1_COMPLETE.md](PHASE_1_COMPLETE.md) - Feature details
-- [DATABASE_ARCHITECTURE.md](DATABASE_ARCHITECTURE.md) - Database schema
+- [README.md](../README.md) - Project overview and features
+- [DEVELOPER_REFERENCE.md](DEVELOPER_REFERENCE.md) - Complete API documentation
+- [DATABASE_ARCHITECTURE.md](DATABASE_ARCHITECTURE.md) - Technical database details
+- [LOGSEC_3.0_STATUS.md](LOGSEC_3.0_STATUS.md) - Current implementation status
 
 ## 🤝 Support
 
-- GitHub Issues: [Create an issue](https://github.com/yourusername/MCP-Session-Knowledge-Base/issues)
-- Documentation: Check the `/docs` folder
-- Tests: Run `python test_core_v3.py` for diagnostics
+**Having Issues?**
+1. Check this troubleshooting guide first
+2. Run `python tests/test_core_v3.py` for diagnostics
+3. Check Claude Desktop logs for MCP errors
+4. Create a GitHub issue with your error logs
+
+**Community:**
+- GitHub Issues: [Report bugs or ask questions](https://github.com/LevionLaurion/logsec-mcp-session-knowledge-base/issues)
+- Documentation: Browse the `/docs` folder for detailed guides
 
 ---
 
-Happy coding with LogSec! 🚀
+🚀 **LogSec Installation Complete!**  
+Ready for intelligent session management with workspace context analysis.
