@@ -1,15 +1,15 @@
 # LogSec 3.0 - Developer Reference
 
-## 🚀 Production API Reference
+## 🚀 API Reference
 
-LogSec 3.0 is **fully implemented and production ready**. All commands are stable and optimized for real-world usage.
+LogSec 3.0 provides a knowledge management system for AI session continuity through MCP integration.
 
 ## 📋 Available Commands
 
 ### Core API Functions
 
 #### `lo_load(project_name, query=None)`
-**Load project knowledge with intelligent two-mode operation**
+**Load project knowledge with two-mode operation**
 
 ```python
 # Mode 1: Project Overview (Summary)
@@ -31,7 +31,7 @@ lo_load("logsec", "API integration")
     "project_context": {
         "name": "logsec",
         "description": "Knowledge management system...",
-        "phase": "Production Ready",
+        "phase": "Active development",
         "total_sessions": 47,
         "last_activity": "2025-07-05T22:47"
     },
@@ -104,7 +104,7 @@ CONTEXT: Building secure login system
 ```
 
 #### `lo_start(project_name)`
-**Seamless session continuation with workspace context**
+**Session continuation with workspace context**
 
 ```python
 lo_start("logsec")
@@ -113,7 +113,7 @@ lo_start("logsec")
 **Returns:**
 ```python
 {
-    "project_status": "Production Ready (47 sessions)",
+    "project_status": "Active development (47 sessions)",
     "last_session": {
         "session_id": "session_20250705_225044",
         "timestamp": "2 hours ago",
@@ -155,14 +155,13 @@ KNOWLEDGE_TYPES = {
 
 **Embedding Model**: `sentence-transformers/all-MiniLM-L6-v2`
 - **Dimensions**: 384
-- **Performance**: ~100ms for 1000+ documents
-- **Similarity**: Cosine similarity with 0.6 threshold
+- **Similarity**: Cosine similarity with configurable threshold
 
 **Search Process:**
-1. Generate query embedding (50ms)
+1. Generate query embedding
 2. Filter by project scope
 3. Calculate similarities
-4. Rank and format results (50ms)
+4. Rank and format results
 
 ### Auto-Tagging System
 
@@ -421,21 +420,6 @@ def lo_load(self, project_name, query=None):
     # ... implementation
 ```
 
-## 📊 Production Metrics
-
-### Typical Performance
-- **lo_load** (summary): 30-50ms
-- **lo_load** (search): 80-120ms  
-- **lo_save**: 50-80ms (including embedding)
-- **lo_cont**: 20-40ms
-- **lo_start**: 40-60ms
-
-### Scalability Limits
-- **Sessions per project**: 50,000+ (tested)
-- **Concurrent users**: 10+ (file locking)
-- **Vector search**: Sub-second up to 100,000 documents
-- **Database size**: Efficient up to 10GB+
-
 ### Error Handling
 ```python
 try:
@@ -466,7 +450,7 @@ except VectorSearchError:
 4. **Performance**: Monitor database size and query performance
 5. **Updates**: Keep LogSec updated for latest features
 
-### Production Deployment
+### Development Setup
 ```bash
 # 1. Install dependencies
 pip install -r requirements.txt
@@ -486,6 +470,6 @@ python tests/test_core_v3.py
 
 ---
 
-**API Version**: 3.0 (Stable)  
+**API Version**: 3.0  
 **Last Updated**: 2025-07-05  
-**Status**: ✅ Production Ready - All Features Implemented and Tested
+**Status**: ✅ Core functionality implemented
