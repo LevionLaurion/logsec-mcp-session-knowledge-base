@@ -230,7 +230,7 @@ This repository is publicly available for evaluation and educational purposes on
 - Integration into other commercial software
 
 ### 💼 **Commercial Licensing**
-For business use, contact **mail@felixlang.de** for licensing options.
+For business use, contact **mail@laurion.de** for licensing options.
 
 **Full license terms**: See [LICENSE](LICENSE) file.
 
