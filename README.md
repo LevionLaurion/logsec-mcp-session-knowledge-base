@@ -1,4 +1,4 @@
-# 🧠 LogSec 3.0 - Production Ready Knowledge Management
+# 🧠 LogSec 3.0 - Production Ready MCP Session Knowledge Management
 
 [![License: Proprietary](https://img.shields.io/badge/License-Proprietary-red.svg)](LICENSE)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
