@@ -21,7 +21,7 @@ cd LogSec
 #### Step 2: Install Dependencies
 ```bash
 # Run the installation script
-START_LYNNVEST.bat
+install_dependencies.bat
 
 # Or manually:
 pip install -r requirements.txt
