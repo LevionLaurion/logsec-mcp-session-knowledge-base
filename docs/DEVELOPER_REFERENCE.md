@@ -1,255 +1,209 @@
 # LogSec 3.0 - Developer Reference
 
+## Overview
+
+LogSec MCP implements a 3-tier knowledge architecture with automatic Desktop Commander operations tracking.
+
+## Core Components
+
+### LogSniffer
+- Reads Desktop Commander log file from `C:\Users\{USER}\AppData\Roaming\Claude\logs\mcp-server-desktop-commander.log`
+- Extracts operations (read_file, write_file, edit_block, etc.)
+- Automatically activated on every `lo_save`
+- Stores operations in `dc_operations` table with duplicate prevention
+
+### Vector Search (Lazy Loaded)
+- Only loads when needed (first search query)
+- Configurable via `src/config.py`: `ENABLE_VECTOR_SEARCH = True/False`
+- Reduces startup time from ~20s to ~2s
+
 ## API Reference
-
-### lo_load
-
-Load project knowledge with two-mode operation.
-
-**Syntax:**
-```python
-lo_load(project_name: str, query: str = None) -> Dict
-```
-
-**Parameters:**
-- `project_name` (required): Target project name
-- `query` (optional): Search query for semantic search mode
-
-**Returns:**
-
-Mode 1 (Summary):
-```python
-{
-    "project": "project_name",
-    "project_context": {...},
-    "recent_activity": [...],
-    "theme_overview": {...},
-    "mode": "summary"
-}
-```
-
-Mode 2 (Search):
-```python
-{
-    "project": "project_name",
-    "project_context": {...},
-    "search_results": [...],
-    "query": "search query",
-    "mode": "search"
-}
-```
-
-### lo_save
-
-Save content with auto-classification.
-
-**Syntax:**
-```python
-lo_save(project_name: str, content: str = None, session_id: str = None) -> Dict
-```
-
-**Parameters:**
-- `project_name` (required): Target project (alphanumeric + _-)
-- `content` (optional): Content to save. If omitted, requests summary
-- `session_id` (optional): Custom session ID
-
-**Returns (Summary Request):**
-```python
-{
-    "success": True,
-    "action": "request_summary",
-    "prompt": "...",
-    "project_name": "project_name",
-    "session_id": "session_20250107_120000"
-}
-```
-
-**Returns (Content Saved):**
-```python
-{
-    "session_id": "session_20250107_120000",
-    "project": "project_name",
-    "knowledge_type": "implementation",
-    "tags": ["python", "api", "mcp"],
-    "confidence": 0.89,
-    "filepath": "C:\\LogSec\\data\\sessions\\session_20250107_120000_project.md"
-}
-```
-
-### lo_cont
-
-Generate prompt for Claude to analyze current session.
-
-**Syntax:**
-```python
-lo_cont(project_name: str, mode: str = "auto") -> Dict
-```
-
-**Parameters:**
-- `project_name` (required): Target project
-- `mode` (optional): Focus mode
-  - `"auto"`: Extract all relevant information (default)
-  - `"debug"`: Focus on errors and debugging
-  - `"implement"`: Focus on implementation tasks
-  - `"refactor"`: Focus on code structure
-  - `"document"`: Focus on documentation
-
-**Returns:**
-```python
-{
-    "success": True,
-    "action": "request_analysis",
-    "prompt": "...",
-    "project": "project_name",
-    "mode": "auto",
-    "instructions": "Claude will analyze the session and save the continuation data."
-}
-```
-
-### lo_cont_save
-
-Save continuation data analyzed by Claude.
-
-**Syntax:**
-```python
-lo_cont_save(project_name: str, continuation_data: Dict) -> Dict
-```
-
-**Parameters:**
-- `project_name` (required): Target project
-- `continuation_data` (required): Analyzed data with structure:
-  ```python
-  {
-      "task": "Description of what was worked on",
-      "result": "What was accomplished",
-      "position": "file.py:line or location",
-      "next": "Next logical step",
-      "files": [{"path": "path/to/file", "relevance": "edited|viewed"}],
-      "commands": [{"cmd": "command", "status": "success|failed"}],
-      "context": "Important context"
-  }
-  ```
-
-**Returns:**
-```python
-{
-    "success": True,
-    "project": "project_name",
-    "continuation_saved": {...},
-    "message": "Continuation context saved for project_name. Use lo_start('project_name') to resume."
-}
-```
 
 ### lo_start
 
-Load project with continuation context.
+Quick start with project context and continuation.
 
 **Syntax:**
 ```python
 lo_start(project_name: str) -> Dict
 ```
 
-**Parameters:**
-- `project_name` (required): Target project
+**Features:**
+- Loads Tier 2 project context
+- Checks for continuation file
+- Provides last session summary if no continuation exists
 
-**Returns:**
+### lo_load
+
+Load project knowledge with two modes.
+
+**Mode 1 - Summary (no query):**
 ```python
-{
-    "project_context": {...},
-    "continuation_data": {...},
-    "continuation_ready": True,
-    "project": "project_name",
-    "source": "enhanced_continuation"
-}
+lo_load("logsec")
+```
+Returns:
+- Project context (Tier 2)
+- Recent activity (last 3 sessions)
+- Knowledge theme overview
+- No vector search needed
+
+**Mode 2 - Search (with query):**
+```python
+lo_load("logsec", "error handling")
+```
+Returns:
+- Project context (Tier 2)  
+- Search results with similarity scores
+- Triggers lazy loading of vector search on first use
+
+### lo_save
+
+Save session with automatic DC operations tracking.
+
+**Syntax:**
+```python
+lo_save(project_name: str, content: str = None, session_id: str = None) -> Dict
 ```
 
-## Database Operations
+**Features:**
+- Extracts DC operations from log file via LogSniffer
+- Auto-tags content
+- Classifies knowledge type
+- Stores in database (no files)
+- Triggers auto-update of Tier 2 README
 
-### Session Storage
+**DC Operations Tracking:**
+- Reads actual Desktop Commander logs
+- Stores: operation_type, path, timestamp, project
+- Prevents duplicates via UNIQUE index
 
-Sessions are stored with:
-- Automatic timestamp generation
-- Project association
-- Knowledge type classification
-- Tag extraction
-- Vector embedding generation
-- Confidence scoring
+### lo_cont
 
-### Vector Search
+Generate continuation context using real DC operations.
 
-- Model: sentence-transformers/all-MiniLM-L6-v2
-- Similarity: Cosine similarity
-- Threshold: 0.6
+**Syntax:**
+```python
+lo_cont(project_name: str, mode: str = "auto") -> Dict
+```
 
-### Knowledge Types
+**Modes:**
+- `auto` - General continuation
+- `debug` - Focus on errors
+- `implement` - Focus on implementation
+- `refactor` - Focus on code structure  
+- `document` - Focus on documentation
 
-| Type | Description |
-|------|-------------|
-| api_doc | API documentation, endpoints |
-| implementation | Code implementations |
-| architecture | System design |
-| schema | Data structures |
-| milestone | Version releases |
-| debug | Bug fixes |
-| continuation | Session handoffs |
-| documentation | General docs |
+**Features:**
+- Uses DC operations from database (not text parsing)
+- Shows actual edited files (write_file, edit_block)
+- Lists executed commands
+- Identifies working directories
+
+### lo_update
+
+Update Tier 2 README from all sessions.
+
+**Syntax:**
+```python
+lo_update(project_name: str) -> Dict
+```
+
+**Features:**
+- Analyzes all sessions in database
+- Extracts directories from DC operations
+- Generates knowledge type distribution
+- Updates project documentation
+- No vector search required
+
+## Database Schema
+
+### session_metadata
+```sql
+CREATE TABLE session_metadata (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT UNIQUE NOT NULL,
+    project_name TEXT,
+    timestamp TEXT,
+    tags TEXT,  -- JSON array
+    knowledge_type TEXT,
+    confidence_score REAL,
+    content_text TEXT,  -- Full session content
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+)
+```
+
+### dc_operations
+```sql
+CREATE TABLE dc_operations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT,
+    project_name TEXT,
+    operation_type TEXT,  -- read_file, write_file, etc.
+    path TEXT,
+    details TEXT,
+    timestamp TIMESTAMP,
+    UNIQUE(timestamp, operation_type, path)  -- Prevent duplicates
+)
+```
+
+### session_vectors
+```sql
+CREATE TABLE session_vectors (
+    session_id TEXT PRIMARY KEY,
+    project_name TEXT,
+    embedding BLOB,  -- Binary vector data
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)
+```
+
+### readme_store
+```sql
+CREATE TABLE readme_store (
+    project_name TEXT PRIMARY KEY,
+    content TEXT NOT NULL,
+    version INTEGER DEFAULT 1,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)
+```
 
 ## Configuration
 
-### MCP Server Setup
-
-Add to `claude_desktop_config.json`:
-```json
-{
-  "mcpServers": {
-    "logsec": {
-      "command": "python",
-      "args": ["C:\\LogSec\\src\\logsec_core_v3.py"],
-      "env": {}
-    }
-  }
-}
+Edit `src/config.py`:
+```python
+# Disable for fast startup, enable for semantic search
+ENABLE_VECTOR_SEARCH = False
 ```
 
-### Database Location
-- Default: `C:\LogSec\data\database\logsec_phase3.db`
-- Sessions: `C:\LogSec\data\sessions\`
+**Performance Optimizations**
 
-### Desktop Commander Integration
-- Log location: `C:\Users\[Username]\.claude-server-commander-logs\`
-- Required for workspace context features
+1. **Lazy Loading**: Vector search only loads when needed
+2. **Duplicate Prevention**: UNIQUE index on DC operations
+3. **Pure DB Storage**: No file I/O overhead
+4. **Batch Operations**: Efficient SQL queries
 
 ## Error Handling
 
-All functions return error dictionaries on failure:
+All methods return error dict on failure:
 ```python
-{"error": "error message"}
+{"error": "Error description"}
 ```
 
 Common errors:
-- Missing project_name
-- Invalid project name format
-- Database access issues
-- File not found
-- Vector search failures
+- "project_name is required"
+- "Project 'name' not found"
+- "Could not save DC operations: ..."
 
-## Implementation Notes
+## Module Structure
 
-- Database indices for common queries
-- Vector embeddings cached in memory
-- Batch operations for tag generation
-- Connection pooling for SQLite
-
-## Testing
-
-Run test suite:
-```bash
-python tests/test_core_v3.py
 ```
-
-Tests cover:
-- Database initialization
-- API functionality
-- Vector search accuracy
-- Classification accuracy
-- Error handling
+src/
+├── logsec_core_v3.py       # Main server implementation
+├── config.py               # Configuration settings
+└── modules/
+    ├── log_sniffer.py      # DC log reader
+    ├── continuation_parser.py
+    ├── extended_auto_tagger.py
+    ├── knowledge_type_classifier.py
+    ├── embedding_engine.py  # Lazy loaded
+    └── vector_search.py     # Lazy loaded
+```

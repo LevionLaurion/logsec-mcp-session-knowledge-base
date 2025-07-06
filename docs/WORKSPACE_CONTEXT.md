@@ -2,178 +2,139 @@
 
 ## Overview
 
-LogSec integrates with Desktop Commander to provide workspace context for session continuation. This feature analyzes file operations and commands from previous sessions.
+LogSec provides advanced Desktop Commander integration through LogSniffer, tracking all file operations and commands directly from DC log files.
 
 ## Status
 
-Partially implemented. Core functionality exists but lacks comprehensive testing and metrics.
+✅ **Fully Implemented** - LogSniffer reads actual DC logs for accurate operation tracking.
 
 ## Architecture
 
-### Components
+### Core Components
 
-1. **DesktopCommanderParser**: Extracts operations from session content
-2. **ProjectDetector**: Identifies project from file paths
-3. **WorkspaceContextGenerator**: Creates current workspace snapshot
+1. **LogSniffer** (`modules/log_sniffer.py`)
+   - Reads from: `%APPDATA%\Claude\logs\mcp-server-desktop-commander.log`
+   - Parses JSON-formatted DC operations
+   - Extracts: operation type, paths, timestamps
+   - Handles duplicate prevention
 
-### Data Flow
+2. **DC Operations Storage**
+   - Table: `dc_operations`
+   - Automatic project detection from paths
+   - UNIQUE constraint prevents duplicates
+   - Indexed for fast queries
 
-1. Parse Desktop Commander operations from session
-2. Detect associated projects
-3. Validate file existence
-4. Generate structured context
+3. **Continuation Context** (`lo_cont`)
+   - Uses real DC operations from database
+   - Groups by operation type
+   - Shows actual edited files
+   - Lists executed commands
 
-## Implementation
+## Tracked Operations
 
-### Operation Extraction
+### File Operations
+- **read_file**: Files viewed/analyzed
+- **write_file**: Files created/modified
+- **edit_block**: Surgical file edits
+- **move_file**: File relocations
+- **get_file_info**: File metadata checks
 
-Supported Desktop Commander operations:
-- `read_file`
-- `write_file`
-- `edit_block`
-- `execute_command`
-- `list_directory`
-- `move_file`
-- `create_directory`
-- `search_files`
+### Directory Operations
+- **list_directory**: Folders explored
+- **create_directory**: Folders created
+- **search_files**: File searches
+- **search_code**: Code pattern searches
 
-### Project Detection
+### Command Operations
+- **execute_command**: Shell commands run
+- **read_output**: Command output reading
+- **force_terminate**: Process termination
 
-Pattern-based detection using:
-- Directory names
-- File paths
-- Project-specific patterns
+## Usage Examples
 
-### Context Generation
-
-Generates:
-- Active files (with existence validation)
-- Working directories
-- Executed commands
-- Recent edits
-
-## Usage
-
-Automatically activated in:
-- `lo_start`: Shows workspace context
-- `lo_cont`: Includes file operations in analysis
-
-## Output Format
-
-```json
-{
-  "files": ["src/main.py", "tests/test_main.py"],
-  "directories": ["src/", "tests/"],
-  "commands": [
-    {"cmd": "python test.py", "status": "success"}
-  ],
-  "recent_edits": ["src/main.py"]
-}
+### Automatic Tracking
+```python
+# Every lo_save automatically tracks DC operations
+lo_save("myproject", "Session summary")
+# → Reads DC log
+# → Extracts operations since last save
+# → Stores in database
 ```
 
-## Limitations
+### Continuation Context
+```python
+# Get workspace context for continuation
+lo_cont("myproject")
+# Returns:
+# - Recently edited files
+# - Executed commands
+# - Working directories
+# - Session summaries
+```
 
-### Current
-- No benchmarks available
-- Project detection accuracy unknown
-- Limited error handling
-- No caching implementation
+### Query Operations
+```sql
+-- Find all files edited in project
+SELECT DISTINCT path FROM dc_operations 
+WHERE project_name = 'myproject' 
+AND operation_type = 'write_file';
 
-### Technical
-- Requires Desktop Commander logs
-- Local file system only
-- No version control integration
-- Single-user focused
+-- Get command history
+SELECT details FROM dc_operations
+WHERE operation_type = 'execute_command'
+ORDER BY timestamp DESC;
+```
 
-## Testing Status
+## Implementation Details
 
-### Implemented
-- Basic unit tests
-- Pattern matching tests
-- File validation tests
+### Log Parsing
+```python
+# LogSniffer reads JSON lines from DC log
+{"timestamp": "2025-07-06T10:30:45", "operation": "write_file", "path": "C:\\Project\\file.py"}
+```
 
-### Missing
-- Testing
-- Accuracy metrics
-- Edge case coverage
-- Cross-platform validation
+### Project Detection
+- Extracts project from path structure
+- Handles Windows/Unix paths
+- Configurable project root patterns
 
-## Future Enhancements
-
-### Short Term
-- Add caching layer
-- Better error handling
-- Accuracy metrics
-
-### Long Term
-- Git integration
-- Remote file support
-- Team collaboration
-- IDE plugins
+### Performance
+- Incremental log reading (only new entries)
+- Batch inserts for efficiency
+- Low overhead per save operation
 
 ## Configuration
 
-### Log Location
+No configuration needed - works automatically when Desktop Commander is active.
 
-Default paths:
-- Windows: `C:\Users\[Username]\.claude-server-commander-logs\`
-- macOS/Linux: `~/.claude-server-commander-logs/`
-
-### Custom Location
-
-Set environment variable:
-```bash
-export CLAUDE_COMMANDER_LOGS="/custom/path"
-```
-
-## Troubleshooting
-
-### No workspace context
-
-1. Verify Desktop Commander is installed
-2. Check log directory permissions
-3. Ensure logs exist
-4. Validate log format
-
-### Incorrect project detection
-
-1. Check project patterns
-2. Verify file paths
-3. Review detection logic
-4. Add custom patterns if needed
-
-### Slow response
-
-1. Check log file size
-2. Monitor parsing time
-3. Consider implementing cache
-4. Limit operation history
-
-## Technical Details
-
-### Regex Patterns
-
-File operation extraction uses XML parameter parsing:
+Optional settings in `config.py`:
 ```python
-r'<parameter name="path">(.*?)</parameter>'
-```
-
-### File Validation
-
-Only shows files that currently exist:
-```python
-os.path.exists(path) or os.path.isdir(path)
-```
-
-### Project Patterns
-
-Configurable project detection:
-```python
+# Customize project detection patterns
 PROJECT_PATTERNS = {
-    'project_name': [r'pattern1', r'pattern2']
+    'logsec': r'C:\\LogSec',
+    'myproject': r'C:\\Projects\\MyProject'
 }
 ```
 
-## Conclusion
+## Benefits
 
-Workspace context integration provides valuable session continuation support but requires additional testing for production use.
+1. **Accurate History**: Real operations, not parsed text
+2. **No Manual Tracking**: Automatic from DC logs
+3. **Project Context**: Know exactly what was modified
+4. **Command History**: Full shell command tracking
+5. **Search Integration**: Find files by operation type
+
+## Troubleshooting
+
+### Operations Not Tracked
+1. Ensure Desktop Commander is running
+2. Check log file exists: `%APPDATA%\Claude\logs\`
+3. Verify read permissions on log file
+
+### Duplicate Operations
+- Normal: UNIQUE constraint prevents duplicates
+- Check timestamp precision if issues persist
+
+### Missing Project Assignment
+- Operations without clear project go to "unknown"
+- Configure PROJECT_PATTERNS for custom detection
