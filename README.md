@@ -4,6 +4,7 @@
 [![Python](https://img.shields.io/badge/Python-3.8+-green)](https://python.org)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 [![Status](https://img.shields.io/badge/Status-Production--Ready-success)](https://github.com/LevionLaurion/logsec-mcp-session-knowledge-base)
+[![Last Commit](https://img.shields.io/github/last-commit/LevionLaurion/logsec-mcp-session-knowledge-base)](https://github.com/LevionLaurion/logsec-mcp-session-knowledge-base/commits/master)
 
 Knowledge management system for AI session continuity, built as a Model Context Protocol (MCP) server.
 
