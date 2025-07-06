@@ -11,7 +11,13 @@ import re
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Optional, List
-import numpy as np
+
+# Optional import for numpy (not required for core functionality)
+try:
+    import numpy as np
+    HAS_NUMPY = True
+except ImportError:
+    HAS_NUMPY = False
 
 # Simple vector search implementation
 class SimpleVectorSearch:

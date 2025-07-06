@@ -1,0 +1,7 @@
+# Test dependencies for LogSec
+pytest>=7.0.0
+pytest-cov>=4.0.0
+black>=22.0.0
+
+# Optional: For vector search functionality testing
+# numpy>=1.21.0
