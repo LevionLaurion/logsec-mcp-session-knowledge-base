@@ -41,7 +41,12 @@ logion_brain.db
 # Temp files
 *.tmp
 *.bak
+*.backup
 *~
+
+# Temp directories
+src/temp/
+temp/
 
 # Build
 build/
