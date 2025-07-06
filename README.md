@@ -56,22 +56,17 @@ lo_save("project_name", "content")   # Save specific content
 ```
 
 ### lo_cont
-Extract continuation context:
+Create continuation file for session handoff:
 ```python
 lo_cont("project_name")              # Analyze current session
 lo_cont("project_name", "mode")      # Focused extraction (debug/implement/refactor/document)
 ```
-
-### lo_cont_save
-Save analyzed continuation data:
-```python
-lo_cont_save("project_name", continuation_data)  # Save continuation context
-```
+Creates/updates: `C:\LogSec\data\continuation\{project}_cont.md`
 
 ### lo_start
-Start with workspace context:
+Start with continuation context:
 ```python
-lo_start("project_name")             # Load last session + workspace analysis
+lo_start("project_name")             # Load continuation file + project context
 ```
 
 ## Architecture

@@ -450,150 +450,175 @@ class LogSecCore:
             return {"error": str(e)}
     
     def lo_cont(self, project_name: str, mode: str = "auto") -> Dict:
-        """Enhanced automatic continuation context extraction
+        """Generate continuation file for seamless session handoff
         
         Args:
             project_name: Target project name
             mode: "auto" (default) or focus mode ("debug", "implement", "refactor", "document")
         
         Returns:
-            Prompt for Claude to analyze current session
+            Instructions for Claude to create continuation file
         """
         try:
             if not project_name:
                 return {"error": "project_name is required"}
             
+            # Ensure continuation directory exists
+            cont_dir = self.base_dir / "data" / "continuation"
+            cont_dir.mkdir(parents=True, exist_ok=True)
+            
             # Create prompt for Claude to analyze current session
-            analysis_prompt = f"""Please analyze the current session and extract continuation context for project '{project_name}'.
+            analysis_prompt = f"""Analyze the current session for project '{project_name}' and create a continuation file.
 
-Focus on the CURRENT CONVERSATION (not saved sessions) and provide:
+Focus on the CURRENT CONVERSATION and extract:
 
-1. **Task**: What was being worked on in this session?
-2. **Result**: What was accomplished in the last few interactions?
-3. **Position**: Which file/location was last being worked on?
-4. **Next**: What should be done next based on the conversation?
-5. **Files**: Which files were mentioned or worked on? (with relevance: edited/viewed)
-6. **Commands**: Which commands were executed?
-7. **Context**: Any important context for continuation?
+1. **STATUS**: What was being worked on? (Current task/feature)
+2. **POSITION**: Where in the code/project? (file:line or location)
+3. **PROBLEM**: What issue/blocker was encountered?
+4. **TRIED**: What solutions were attempted?
+5. **NEXT**: What should be done next?
+6. **FILES**: Key files involved (with what was done)
+7. **COMMANDS**: Desktop Commander operations executed
+8. **CONTEXT**: Important details for continuation
 
-{f"Mode: {mode} - " if mode != "auto" else ""}{"Focus on debugging aspects" if mode == "debug" else "Focus on implementation tasks" if mode == "implement" else "Focus on refactoring" if mode == "refactor" else "Focus on documentation" if mode == "document" else ""}
+IMPORTANT: Analyze ALL Desktop Commander operations in this session:
+- Every desktop-commander:read_file → note the path
+- Every desktop-commander:write_file → note the path and action
+- Every desktop-commander:edit_block → note the file and what was changed
+- Every desktop-commander:execute_command → note the command
+- Every desktop-commander:create_directory → note the path
+- Every desktop-commander:list_directory → note the path
+- Every desktop-commander:search_code → note path and search term
 
-Please respond in this exact JSON format:
-```json
-{{
-    "task": "Description of what was worked on",
-    "result": "What was accomplished",
-    "position": "file.py:line or location",
-    "next": "Next logical step",
-    "files": [
-        {{"path": "path/to/file", "relevance": "edited|viewed"}}
-    ],
-    "commands": [
-        {{"cmd": "command", "status": "success|failed"}}
-    ],
-    "context": "Important context"
-}}
-```
+{f"Mode: {mode} - " if mode != "auto" else ""}{"Focus on debugging" if mode == "debug" else "Focus on implementation" if mode == "implement" else "Focus on refactoring" if mode == "refactor" else "Focus on documentation" if mode == "document" else ""}
 
-Then save it using: lo_cont_save('{project_name}', <your_json_analysis>)"""
+Create a clear, structured continuation document and save it to:
+{cont_dir / f"{project_name}_cont.md"}
+
+Format it like this:
+
+```markdown
+# {project_name.upper()} Continuation - {datetime.now().strftime("%Y-%m-%d %H:%M")}
+
+## STATUS
+[What was being worked on]
+
+## POSITION
+[Current file/location]
+
+## PROBLEM
+[Current blocker/issue]
+
+## TRIED
+- [Attempt 1]
+- [Attempt 2]
+
+## NEXT
+- [Next step 1]
+- [Next step 2]
+
+## FILES
+- path/to/file1.py - [what was done: read/written/edited]
+- path/to/file2.py - [what was done: read/written/edited]
+
+## COMMANDS
+- `command executed` - [result/purpose]
+- `another command` - [result/purpose]
+
+## WORKSPACE
+Desktop Commander operations from this session:
+- Read: [list all files read with full paths]
+- Written: [list all files written/edited with full paths]
+- Created: [list all directories created]
+- Searched: [list all search operations with paths]
+- Executed: [list all shell commands]
+
+## CONTEXT
+[Any important context for continuation]
+```"""
 
             return {
                 "success": True,
-                "action": "request_analysis",
+                "action": "create_continuation",
                 "prompt": analysis_prompt,
+                "continuation_path": str(cont_dir / f"{project_name}_cont.md"),
                 "project": project_name,
                 "mode": mode,
-                "instructions": "Claude will analyze the session and save the continuation data."
+                "instructions": f"Claude will create continuation file at: {cont_dir / f'{project_name}_cont.md'}"
             }
             
         except Exception as e:
             print(f"Error in lo_cont: {e}", file=sys.stderr)
             return {"error": str(e)}
     
-    def lo_cont_save(self, project_name: str, continuation_data: Dict) -> Dict:
-        """Save continuation data analyzed by Claude"""
-        try:
-            if not project_name:
-                return {"error": "project_name is required"}
-            
-            # Validate continuation data structure
-            required_fields = ["task", "result", "position", "next"]
-            for field in required_fields:
-                if field not in continuation_data:
-                    continuation_data[field] = f"Not specified"
-            
-            # Ensure lists exist
-            if "files" not in continuation_data:
-                continuation_data["files"] = []
-            if "commands" not in continuation_data:
-                continuation_data["commands"] = []
-            if "context" not in continuation_data:
-                continuation_data["context"] = ""
-            
-            # Save to database
-            self._save_continuation_to_db(project_name, continuation_data)
-            
-            return {
-                "success": True,
-                "project": project_name,
-                "continuation_saved": continuation_data,
-                "message": f"Continuation context saved for {project_name}. Use lo_start('{project_name}') to resume."
-            }
-            
-        except Exception as e:
-            print(f"Error in lo_cont_save: {e}", file=sys.stderr)
-            return {"error": str(e)}
-
+    # REMOVED lo_cont_save - no longer needed with file-based approach
+    
     def lo_start(self, project_name: str) -> Dict:
-        """Enhanced session continuation with saved continuation data"""
+        """Load continuation from simple file for seamless session resumption"""
         try:
             if not project_name:
                 return {"error": "project_name is required"}
             
-            # Load Tier 2 context
+            # Load Tier 2 context (always included)
             tier_2_context = self._get_project_context(project_name)
             
-            # Try to load saved continuation data from database
-            continuation = self._load_continuation_from_db(project_name)
+            # Check for continuation file
+            cont_file = self.base_dir / "data" / "continuation" / f"{project_name}_cont.md"
             
-            if continuation:
-                # Use enhanced continuation data
+            if cont_file.exists():
+                # Load continuation file
+                with open(cont_file, 'r', encoding='utf-8') as f:
+                    continuation_content = f.read()
+                
+                # Parse with ContinuationParser if available
+                parsed_data = {}
+                if HAS_CONTINUATION_PARSER and self.parser:
+                    try:
+                        parsed_data = self.parser.parse(continuation_content)
+                    except Exception as e:
+                        print(f"Warning: Could not parse continuation: {e}", file=sys.stderr)
+                
                 return {
-                    "project_context": tier_2_context,
-                    "continuation_data": continuation,
-                    "continuation_ready": True,
                     "project": project_name,
-                    "source": "enhanced_continuation"
+                    "project_context": tier_2_context,
+                    "continuation": {
+                        "content": continuation_content,
+                        "parsed": parsed_data,
+                        "file_path": str(cont_file),
+                        "exists": True
+                    },
+                    "instructions": f"Continuation loaded from {cont_file}. Continue where the last session left off.",
+                    "mode": "continuation"
                 }
             else:
-                # Fallback to old method
+                # No continuation file - fallback to last session
                 last_session = self._get_last_session(project_name)
-                if not last_session:
-                    return {"error": f"No sessions found for project: {project_name}"}
                 
+                if not last_session:
+                    return {
+                        "project": project_name,
+                        "project_context": tier_2_context,
+                        "continuation": {"exists": False},
+                        "instructions": f"No continuation file found at {cont_file}. Starting fresh with project context.",
+                        "mode": "fresh_start"
+                    }
+                
+                # Load last session as fallback
                 session_content = self._load_session_content(last_session['session_id'])
-                dc_operations = self.dc_parser.extract_operations(session_content)
-                workspace = self._generate_workspace_context(dc_operations, project_name)
-                parsed = self.parser.parse(session_content)
                 
                 return {
+                    "project": project_name,
                     "project_context": tier_2_context,
-                    "session_context": {
+                    "last_session": {
                         "session_id": last_session['session_id'],
                         "timestamp": last_session['timestamp'],
-                        "status": parsed.get('status'),
-                        "position": parsed.get('position'), 
-                        "next_steps": parsed.get('next'),
-                        "problems": parsed.get('problem'),
-                        "tried": parsed.get('tried'),
-                        "todo": parsed.get('todo')
+                        "summary": session_content[:500] + "..." if len(session_content) > 500 else session_content
                     },
-                    "workspace_context": workspace,
-                    "continuation_ready": True,
-                    "project": project_name,
-                    "source": "legacy_parser"
+                    "continuation": {"exists": False},
+                    "instructions": f"No continuation file. Use 'lo_cont {project_name}' to create one for next time.",
+                    "mode": "last_session_fallback"
                 }
-            
+                
         except Exception as e:
             print(f"Error in lo_start: {e}", file=sys.stderr)
             return {"error": str(e)}
@@ -1003,13 +1028,26 @@ Then save it using: lo_cont_save('{project_name}', <your_json_analysis>)"""
         """Format enhanced lo_cont output for display"""
         output = []
         
-        if result.get("action") == "request_analysis":
-            # This is the prompt for Claude
+        if "error" in result:
+            return f"❌ Error: {result['error']}"
+        
+        if result.get("action") == "create_continuation":
+            # This is the new format
+            output.append("🔍 Analyzing Current Session for Continuation...")
+            output.append("")
+            output.append(f"📂 Continuation will be saved to: {result.get('continuation_path', 'unknown')}")
+            output.append("")
+            output.append("Instructions:")
+            output.append(result.get("instructions", ""))
+            
+        elif result.get("action") == "request_analysis":
+            # Legacy format (kept for compatibility)
             output.append("🔍 Analyzing Current Session...")
             output.append("")
             output.append(result.get("prompt", ""))
             output.append("")
             output.append("📝 " + result.get("instructions", ""))
+            
         elif result.get("success") and "continuation_saved" in result:
             # This is the saved result
             output.append("✅ Continuation Context Saved")
@@ -1051,66 +1089,65 @@ Then save it using: lo_cont_save('{project_name}', <your_json_analysis>)"""
             return f"❌ Error: {result['error']}"
         
         project_name = result.get("project", "Unknown")
-        output.append(f"🚀 {project_name.title()} Quick Start")
+        output.append(f"🚀 {project_name.title()} Session Start")
         output.append("")
         
-        # Show source of continuation data
-        source = result.get("source", "unknown")
-        if source == "enhanced_continuation":
-            output.append("✨ Using enhanced continuation data")
-        else:
-            output.append("📝 Using legacy session data")
-        output.append("")
+        # Show mode
+        mode = result.get("mode", "unknown")
         
-        # Enhanced continuation data
-        if "continuation_data" in result:
-            cont = result["continuation_data"]
-            output.append(f"🎯 Continuing: {cont.get('task', 'Previous work')}")
-            output.append("")
-            output.append("📊 Last Result:")
-            output.append(f"{cont.get('result', 'No recent results')}")
-            output.append("")
-            output.append("📍 Position:")
-            output.append(f"{cont.get('position', 'Unknown position')}")
+        if mode == "continuation":
+            output.append("✨ Continuation file loaded!")
             output.append("")
             
-            if cont.get("files"):
-                output.append("📁 Active Files:")
-                for file in cont["files"][:5]:
-                    icon = "✏️" if file['relevance'] == "edited" else "👁️"
-                    output.append(f"  {icon} {file['path']}")
+            # Show continuation content
+            cont = result.get("continuation", {})
+            if cont.get("exists") and cont.get("content"):
+                output.append("📋 Continuation Context:")
+                output.append("-" * 50)
+                # Show first 1000 chars of continuation
+                content = cont["content"][:1000]
+                if len(cont["content"]) > 1000:
+                    content += "\n... (truncated)"
+                output.append(content)
+                output.append("-" * 50)
                 output.append("")
+                output.append(f"📂 Loaded from: {cont.get('file_path', 'unknown')}")
             
-            if cont.get("commands"):
-                output.append("⚡ Recent Commands:")
-                for cmd in cont["commands"][:3]:
-                    status = "✅" if cmd['status'] == "success" else "❌"
-                    output.append(f"  {status} {cmd['cmd']}")
+        elif mode == "last_session_fallback":
+            output.append("📝 No continuation file found - showing last session")
+            output.append("")
+            
+            last_session = result.get("last_session", {})
+            if last_session:
+                output.append(f"Session ID: {last_session.get('session_id', 'unknown')}")
+                output.append(f"Timestamp: {last_session.get('timestamp', 'unknown')}")
                 output.append("")
+                output.append("Summary:")
+                output.append(last_session.get('summary', 'No summary available'))
             
-            output.append("➡️  Next Step:")
-            output.append(cont.get('next', 'Continue development'))
+            output.append("")
+            output.append(result.get("instructions", ""))
             
-            if cont.get("context"):
-                output.append("")
-                output.append(f"💡 Context: {cont['context']}")
+        elif mode == "fresh_start":
+            output.append("🆕 Fresh start - no previous sessions found")
+            output.append("")
+            output.append(result.get("instructions", ""))
         
-        # Legacy session context (fallback)
-        elif "session_context" in result:
-            context = result["session_context"]
-            output.append("🔄 Last Session:")
-            output.append(f"  • ID: {context.get('session_id', 'N/A')}")
-            output.append(f"  • Time: {context.get('timestamp', 'N/A')}")
-            
-            if context.get("status"):
-                output.append(f"\n📌 Status: {context['status']}")
-            if context.get("position"):
-                output.append(f"📍 Position: {str(context['position'])}")
-            if context.get("next_steps"):
-                output.append(f"➡️  Next: {context['next_steps']}")
+        # Always show project context if available
+        context = result.get("project_context", {})
+        if context:
+            output.append("")
+            output.append("📚 Project Context:")
+            if context.get("description"):
+                output.append(f"  • Description: {context['description']}")
+            if context.get("current_phase"):
+                output.append(f"  • Phase: {context['current_phase']}")
+            if context.get("repository_url"):
+                output.append(f"  • Repository: {context['repository_url']}")
         
         output.append("")
         output.append("🎯 Ready to continue!")
+        
         return "\n".join(output)
 
 

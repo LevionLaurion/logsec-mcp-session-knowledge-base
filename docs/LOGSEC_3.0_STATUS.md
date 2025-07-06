@@ -1,26 +1,36 @@
 # LogSec 3.0 - Current Status
 
 **Last Updated**: 2025-01-06  
-**Version**: 3.0.0  
-**Status**: Functional
+**Version**: 3.0.1  
+**Status**: Production Ready - Continuation System Fixed
 
 ## Overview
 
 LogSec is a knowledge management system for AI session continuity, implemented as a Model Context Protocol (MCP) server. It provides project-based knowledge organization with semantic search and automatic classification.
 
+## Recent Changes (v3.0.1)
+
+### Fixed Continuation System
+- Converted from database-based to file-based continuation
+- One markdown file per project in `C:\LogSec\data\continuation\`
+- Removed `lo_cont_save` - continuation is now handled by file writes
+- Fixed display formatters for proper output
+
 ## Architecture
 
 ### Three-Tier System
-- **Tier 1**: Working memory (last session)
-- **Tier 2**: Project context (always loaded)
-- **Tier 3**: Knowledge base (searchable archive)
+- **Tier 1**: Dynamic summaries (generated from DB)
+- **Tier 2**: Project documentation (README/context) - *needs implementation*
+- **Tier 3**: Full session archive (searchable)
+
+**Current Issue**: Everything is saved as Tier 3 sessions. Tier 2 structured documentation is not implemented.
 
 ### Core Features
 - Project isolation at database level
-- Vector-based semantic search using standard embeddings
+- Vector-based semantic search using Sentence Transformers
 - Automatic classification into 8 knowledge types
 - Desktop Commander workspace integration
-- Session continuation support
+- Simple file-based session continuation
 
 ## API Commands
 
@@ -31,17 +41,20 @@ Two-mode operation:
 
 ### lo_save(project_name, content=None, session_id=None)
 - Without content: Requests summary from Claude
-- With content: Saves with auto-classification and tagging
+- With content: Saves as session with auto-classification
+- **Issue**: Always saves as Tier 3 session, no Tier 2 option
 
 ### lo_cont(project_name, mode="auto")
-Generates prompt for Claude to analyze current session.
-Modes: auto, debug, implement, refactor, document
-
-### lo_cont_save(project_name, continuation_data)
-Saves continuation context analyzed by Claude.
+Creates continuation file at `C:\LogSec\data\continuation\{project}_cont.md`
+- Analyzes current session including Desktop Commander operations
+- Modes: auto, debug, implement, refactor, document
+- One file per project, overwritten on each call
 
 ### lo_start(project_name)
-Loads last session with workspace context for continuation.
+Loads continuation file for seamless session resumption
+- Reads from `C:\LogSec\data\continuation\{project}_cont.md`
+- Falls back to last session if no continuation exists
+- Always includes Tier 2 project context
 
 ## Knowledge Types
 
