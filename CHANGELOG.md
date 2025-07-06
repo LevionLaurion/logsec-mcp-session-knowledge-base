@@ -2,7 +2,7 @@
 
 All notable changes to LogSec MCP Session Knowledge Base will be documented in this file.
 
-## [3.0.1] - 2025-01-07
+## [3.0.1] - 2025-01-06
 
 ### Changed
 - Complete documentation overhaul - removed all marketing language and emojis
@@ -15,7 +15,7 @@ All notable changes to LogSec MCP Session Knowledge Base will be documented in t
 - Corrected API parameter order in documentation
 - Fixed inconsistencies between code and documentation
 
-## [3.0.0] - 2025-01-05
+## [3.0.0] - 2025-01-06
 
 ### Added
 - Two-mode lo_load system (summary mode vs. search mode)
@@ -36,16 +36,3 @@ All notable changes to LogSec MCP Session Knowledge Base will be documented in t
 ### Removed
 - Legacy features from version 2.x
 - Redundant API endpoints
-
-## [2.0.0] - 2024-12-20
-
-### Added
-- Initial MCP server implementation
-- Basic session storage
-- Project management features
-
-## [1.0.0] - 2024-12-01
-
-### Added
-- Initial release
-- Basic knowledge management functionality
