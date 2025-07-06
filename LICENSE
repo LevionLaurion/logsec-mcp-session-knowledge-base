@@ -1,81 +1,22 @@
-# License
+MIT License with Commercial Restriction
 
-**Proprietary Software License**
+Copyright (c) 2025 Felix Lang
 
-Copyright (c) 2025 Felix Lang. All rights reserved.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to use,
+copy, modify, and distribute the Software for personal, educational, or 
+evaluation purposes only, subject to the following conditions:
 
-This software and associated documentation files (the "Software") are proprietary and confidential intellectual property.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-## Terms and Conditions
+Commercial use of the Software requires a separate license agreement.
+For commercial licensing, please contact: mail@laurion.de
 
-### 1. **Public Viewing License**
-This repository is publicly available for:
-- Viewing and evaluation purposes only
-- Educational review and learning
-- Assessment of code quality and architecture
-- Technical due diligence
-
-### 2. **Prohibited Uses**
-The following are strictly prohibited without explicit written permission:
-- Commercial use in any form
-- Redistribution, copying, or forking
-- Modification or derivative works
-- Use in production environments
-- Integration into other software
-- Reverse engineering for competitive purposes
-
-### 3. **Copyright Protection**
-- All code, algorithms, and documentation are protected by copyright
-- Original ideas and implementation approaches are proprietary
-- Database schemas and architectural patterns are confidential
-- Trade secrets and know-how remain protected
-
-### 4. **Permitted Evaluation**
-Authorized parties may:
-- Download for local evaluation only
-- Run tests in isolated environments
-- Review code for assessment purposes
-- Discuss technical implementation privately
-
-### 5. **Commercial Licensing Available**
-For commercial use, enterprise licensing, or custom implementations:
-- Contact for tailored licensing agreements
-- Competitive rates for legitimate business use
-- Support and customization services available
-- White-label and OEM licensing options
-
-### 6. **Warranty Disclaimer**
-The Software is provided "AS IS" without warranty of any kind, express or implied, including but not limited to warranties of merchantability, fitness for a particular purpose, and non-infringement.
-
-### 7. **Limitation of Liability**
-In no event shall Felix Lang be liable for any claim, damages, or other liability arising from the use of this Software.
-
-### 8. **Termination**
-This license may be revoked at any time. Continued access implies acceptance of current terms.
-
-## 📞 Contact & Licensing
-
-For licensing inquiries, permissions, or commercial use:
-
-**Author**: Felix Lang  
-**Email**: mail@laurion.de  
-**Subject**: LogSec Licensing Inquiry
-
-### Quick Licensing Options:
-- **Personal Use**: Contact for free personal license
-- **Educational**: Special rates for academic institutions
-- **Commercial**: Enterprise licensing available
-- **OEM**: White-label and integration licensing
-
----
-
-## ⚠️ Important Notice
-
-**By accessing this repository, you acknowledge:**
-1. This is proprietary software with commercial value
-2. Viewing is permitted for evaluation only
-3. Any unauthorized use violates copyright law
-4. Commercial use requires explicit licensing agreement
-5. You agree to respect intellectual property rights
-
-**Professional inquiries and licensing requests are welcomed!**
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

@@ -449,72 +449,150 @@ class LogSecCore:
             print(f"Error in lo_save: {e}", file=sys.stderr)
             return {"error": str(e)}
     
-    def lo_cont(self, query: str = "", language: str = "en") -> Dict:
-        """Generate continuation context - returns structured data"""
+    def lo_cont(self, project_name: str, mode: str = "auto") -> Dict:
+        """Enhanced automatic continuation context extraction
+        
+        Args:
+            project_name: Target project name
+            mode: "auto" (default) or focus mode ("debug", "implement", "refactor", "document")
+        
+        Returns:
+            Prompt for Claude to analyze current session
+        """
         try:
-            # Parse continuation request
-            parsed = self.parser.parse(query)
+            if not project_name:
+                return {"error": "project_name is required"}
             
-            # Extract workspace context
-            operations = self.dc_parser.extract_operations(query)
-            project = self._detect_project_from_parsed(parsed, operations)
-            
-            workspace_context = self.workspace_gen.generate_context(
-                operations,
-                target_project=project
-            )
-            
+            # Create prompt for Claude to analyze current session
+            analysis_prompt = f"""Please analyze the current session and extract continuation context for project '{project_name}'.
+
+Focus on the CURRENT CONVERSATION (not saved sessions) and provide:
+
+1. **Task**: What was being worked on in this session?
+2. **Result**: What was accomplished in the last few interactions?
+3. **Position**: Which file/location was last being worked on?
+4. **Next**: What should be done next based on the conversation?
+5. **Files**: Which files were mentioned or worked on? (with relevance: edited/viewed)
+6. **Commands**: Which commands were executed?
+7. **Context**: Any important context for continuation?
+
+{f"Mode: {mode} - " if mode != "auto" else ""}{"Focus on debugging aspects" if mode == "debug" else "Focus on implementation tasks" if mode == "implement" else "Focus on refactoring" if mode == "refactor" else "Focus on documentation" if mode == "document" else ""}
+
+Please respond in this exact JSON format:
+```json
+{{
+    "task": "Description of what was worked on",
+    "result": "What was accomplished",
+    "position": "file.py:line or location",
+    "next": "Next logical step",
+    "files": [
+        {{"path": "path/to/file", "relevance": "edited|viewed"}}
+    ],
+    "commands": [
+        {{"cmd": "command", "status": "success|failed"}}
+    ],
+    "context": "Important context"
+}}
+```
+
+Then save it using: lo_cont_save('{project_name}', <your_json_analysis>)"""
+
             return {
-                "parsed": parsed,
-                "workspace_context": workspace_context,
-                "language": language,
-                "project": project
+                "success": True,
+                "action": "request_analysis",
+                "prompt": analysis_prompt,
+                "project": project_name,
+                "mode": mode,
+                "instructions": "Claude will analyze the session and save the continuation data."
             }
             
         except Exception as e:
             print(f"Error in lo_cont: {e}", file=sys.stderr)
             return {"error": str(e)}
-
-    def lo_start(self, project_name: str) -> Dict:
-        """Seamless session continuation with workspace context"""
+    
+    def lo_cont_save(self, project_name: str, continuation_data: Dict) -> Dict:
+        """Save continuation data analyzed by Claude"""
         try:
             if not project_name:
                 return {"error": "project_name is required"}
             
-            # NEU: Load Tier 2 context first
-            tier_2_context = self._get_project_context(project_name)
+            # Validate continuation data structure
+            required_fields = ["task", "result", "position", "next"]
+            for field in required_fields:
+                if field not in continuation_data:
+                    continuation_data[field] = f"Not specified"
             
-            # 1. Get last session
-            last_session = self._get_last_session(project_name)
-            if not last_session:
-                return {"error": f"No sessions found for project: {project_name}"}
+            # Ensure lists exist
+            if "files" not in continuation_data:
+                continuation_data["files"] = []
+            if "commands" not in continuation_data:
+                continuation_data["commands"] = []
+            if "context" not in continuation_data:
+                continuation_data["context"] = ""
             
-            # 2. Load full session content
-            session_content = self._load_session_content(last_session['session_id'])
-            
-            # 3. Extract workspace context from Desktop Commander logs
-            dc_operations = self.dc_parser.extract_operations(session_content)
-            workspace = self._generate_workspace_context(dc_operations, project_name)
-            
-            # 4. Parse continuation data (STATUS:, POSITION:, NEXT:)
-            parsed = self.parser.parse(session_content)
+            # Save to database
+            self._save_continuation_to_db(project_name, continuation_data)
             
             return {
-                "project_context": tier_2_context,  # NEU: Tier 2 data
-                "session_context": {
-                    "session_id": last_session['session_id'],
-                    "timestamp": last_session['timestamp'],
-                    "status": parsed.get('status'),
-                    "position": parsed.get('position'), 
-                    "next_steps": parsed.get('next'),
-                    "problems": parsed.get('problem'),
-                    "tried": parsed.get('tried'),
-                    "todo": parsed.get('todo')
-                },
-                "workspace_context": workspace,
-                "continuation_ready": True,
-                "project": project_name
+                "success": True,
+                "project": project_name,
+                "continuation_saved": continuation_data,
+                "message": f"Continuation context saved for {project_name}. Use lo_start('{project_name}') to resume."
             }
+            
+        except Exception as e:
+            print(f"Error in lo_cont_save: {e}", file=sys.stderr)
+            return {"error": str(e)}
+
+    def lo_start(self, project_name: str) -> Dict:
+        """Enhanced session continuation with saved continuation data"""
+        try:
+            if not project_name:
+                return {"error": "project_name is required"}
+            
+            # Load Tier 2 context
+            tier_2_context = self._get_project_context(project_name)
+            
+            # Try to load saved continuation data from database
+            continuation = self._load_continuation_from_db(project_name)
+            
+            if continuation:
+                # Use enhanced continuation data
+                return {
+                    "project_context": tier_2_context,
+                    "continuation_data": continuation,
+                    "continuation_ready": True,
+                    "project": project_name,
+                    "source": "enhanced_continuation"
+                }
+            else:
+                # Fallback to old method
+                last_session = self._get_last_session(project_name)
+                if not last_session:
+                    return {"error": f"No sessions found for project: {project_name}"}
+                
+                session_content = self._load_session_content(last_session['session_id'])
+                dc_operations = self.dc_parser.extract_operations(session_content)
+                workspace = self._generate_workspace_context(dc_operations, project_name)
+                parsed = self.parser.parse(session_content)
+                
+                return {
+                    "project_context": tier_2_context,
+                    "session_context": {
+                        "session_id": last_session['session_id'],
+                        "timestamp": last_session['timestamp'],
+                        "status": parsed.get('status'),
+                        "position": parsed.get('position'), 
+                        "next_steps": parsed.get('next'),
+                        "problems": parsed.get('problem'),
+                        "tried": parsed.get('tried'),
+                        "todo": parsed.get('todo')
+                    },
+                    "workspace_context": workspace,
+                    "continuation_ready": True,
+                    "project": project_name,
+                    "source": "legacy_parser"
+                }
             
         except Exception as e:
             print(f"Error in lo_start: {e}", file=sys.stderr)
@@ -525,6 +603,184 @@ class LogSecCore:
         """Generate unique session ID"""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         return f"session_{timestamp}"
+    
+    def _get_current_session_content(self) -> str:
+        """Get current session content - placeholder for real implementation"""
+        # In real implementation, this would access Claude's conversation history
+        # For now, return empty string
+        return ""
+    
+    def _apply_focus_mode(self, continuation_data: Dict, mode: str) -> Dict:
+        """Apply mode-specific focus to continuation data"""
+        if mode == "debug":
+            # Emphasize errors and problems
+            continuation_data['focus'] = "debugging"
+        elif mode == "implement":
+            # Focus on task and next steps
+            continuation_data['focus'] = "implementation"
+        elif mode == "refactor":
+            # Prioritize files and structure
+            continuation_data['focus'] = "refactoring"
+        elif mode == "document":
+            # Highlight decisions and context
+            continuation_data['focus'] = "documentation"
+        
+        return continuation_data
+    
+    def _extract_continuation_context(self, project_name: str) -> Dict:
+        """Extract continuation context from current session"""
+        # Get recent sessions for the project
+        recent_sessions = self._get_recent_sessions(project_name, limit=3)
+        
+        # Initialize context with current work
+        context = {
+            "task": f"Working on {project_name} enhancements",
+            "result": "Implementation and testing in progress",
+            "position": "Multiple files edited",
+            "next": "Continue development and testing",
+            "files": [],
+            "commands": [],
+            "context": ""
+        }
+        
+        # Analyze recent sessions
+        all_files = {}
+        task_found = False
+        
+        for session in recent_sessions:
+            session_content = self._load_session_content(session['session_id'])
+            
+            # Extract Desktop Commander operations
+            dc_operations = self.dc_parser.extract_operations(session_content)
+            
+            for op in dc_operations:
+                if op['type'] in ['read_file', 'write_file', 'edit_block']:
+                    path = op['path']
+                    if self._is_valid_path(path):
+                        relevance = "edited" if op['type'] in ['write_file', 'edit_block'] else "viewed"
+                        # Prioritize edited files
+                        if path not in all_files or relevance == "edited":
+                            all_files[path] = {"path": path, "relevance": relevance}
+                
+                elif op['type'] == 'execute_command':
+                    # Extract commands
+                    context['commands'].append({
+                        "cmd": op['path'][:50],  # Truncate long commands
+                        "status": "executed"
+                    })
+            
+            # Extract task from content (only from most recent)
+            if not task_found and session == recent_sessions[0]:
+                # Look for headers or task descriptions
+                task_patterns = [
+                    r'# (.+?)(?:\n|$)',  # Markdown headers
+                    r'## What was accomplished:\s*\n- (.+?)(?:\n|$)',
+                    r'working on\s+(.+?)(?:\.|$)',
+                    r'implementing\s+(.+?)(?:\.|$)',
+                    r'Task:\s*(.+?)(?:\.|$)'
+                ]
+                
+                for pattern in task_patterns:
+                    match = re.search(pattern, session_content, re.IGNORECASE | re.MULTILINE)
+                    if match:
+                        context['task'] = match.group(1).strip()
+                        task_found = True
+                        break
+                
+                # Extract result/status
+                result_patterns = [
+                    r'Result:\s*(.+?)(?:\.|$)',
+                    r'✅\s*(.+?)(?:\.|$)',
+                    r'Status:\s*(.+?)(?:\.|$)',
+                    r'## Technical implementation:\s*\n- (.+?)(?:\n|$)'
+                ]
+                
+                for pattern in result_patterns:
+                    match = re.search(pattern, session_content, re.IGNORECASE | re.MULTILINE)
+                    if match:
+                        context['result'] = match.group(1).strip()
+                        break
+                
+                # Extract position if possible
+                if all_files:
+                    # Get the most recently edited file
+                    edited_files = [f for f in all_files.values() if f['relevance'] == 'edited']
+                    if edited_files:
+                        context['position'] = edited_files[0]['path']
+                
+                # Set knowledge type as context
+                if session.get('type'):
+                    context['context'] = f"Session type: {session['type']}"
+                    
+                # Determine next steps based on content
+                if "implementation complete" in session_content.lower():
+                    context['next'] = "Test the implementation and verify functionality"
+                elif "error" in session_content.lower() or "fehler" in session_content.lower():
+                    context['next'] = "Debug and fix identified issues"
+                elif "test" in session_content.lower():
+                    context['next'] = "Run tests and validate implementation"
+        
+        # Sort files by relevance (edited first)
+        sorted_files = sorted(all_files.values(), 
+                            key=lambda x: (0 if x['relevance'] == 'edited' else 1, x['path']))
+        context['files'] = sorted_files[:10]
+        
+        # Limit commands to last 5
+        context['commands'] = context['commands'][-5:]
+        
+        return context
+    
+    def _save_continuation_to_db(self, project_name: str, continuation_data: Dict):
+        """Save continuation data to database"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                # Create continuation table if not exists
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS continuation_data (
+                        project_name TEXT PRIMARY KEY,
+                        timestamp TEXT NOT NULL,
+                        data TEXT NOT NULL,
+                        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                
+                # Save continuation data
+                conn.execute("""
+                    INSERT OR REPLACE INTO continuation_data 
+                    (project_name, timestamp, data)
+                    VALUES (?, ?, ?)
+                """, (
+                    project_name,
+                    datetime.now().isoformat(),
+                    json.dumps(continuation_data)
+                ))
+                conn.commit()
+        except Exception as e:
+            print(f"Error saving continuation data: {e}", file=sys.stderr)
+    
+    def _load_continuation_from_db(self, project_name: str) -> Optional[Dict]:
+        """Load continuation data from database"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute("""
+                    SELECT data FROM continuation_data
+                    WHERE project_name = ?
+                """, (project_name,))
+                
+                row = cursor.fetchone()
+                if row:
+                    return json.loads(row[0])
+        except Exception as e:
+            print(f"Error loading continuation data: {e}", file=sys.stderr)
+        
+        return None
+    
+    def _is_valid_path(self, path: str) -> bool:
+        """Check if path exists and is valid"""
+        try:
+            return Path(path).exists()
+        except:
+            return False
     
     def _get_recent_sessions(self, project_name: str = None, limit: int = 5) -> List[Dict]:
         """Get recent sessions"""
@@ -744,36 +1000,51 @@ class LogSecCore:
             return json.dumps(result, indent=2)
     
     def _format_cont_output(self, result: Dict) -> str:
-        """Format lo_cont output for display"""
+        """Format enhanced lo_cont output for display"""
         output = []
-        output.append("🔄 Continuation Context Generated")
         
-        if "parsed" in result:
-            parsed = result["parsed"]
-            if parsed.get("status"):
-                output.append(f"\n📌 Status: {parsed['status']}")
-            if parsed.get("position"):
-                output.append(f"📍 Position: {parsed['position']}")
-            if parsed.get("problem"):
-                output.append(f"⚠️ Problem: {parsed['problem']}")
-            if parsed.get("next"):
-                output.append("\n🎯 Next Steps:")
-                for step in parsed["next"]:
-                    output.append(f"  → {step}")
-        
-        if "workspace_context" in result and result["workspace_context"]:
-            output.append("\n🗂️ Workspace Context:")
-            for project, context in result["workspace_context"].items():
-                output.append(f"\n**Project: {project}**")
-                if context.get("files"):
-                    output.append("📄 Active Files:")
-                    for file in list(context["files"])[:5]:
-                        output.append(f"  • {os.path.basename(file)}")
+        if result.get("action") == "request_analysis":
+            # This is the prompt for Claude
+            output.append("🔍 Analyzing Current Session...")
+            output.append("")
+            output.append(result.get("prompt", ""))
+            output.append("")
+            output.append("📝 " + result.get("instructions", ""))
+        elif result.get("success") and "continuation_saved" in result:
+            # This is the saved result
+            output.append("✅ Continuation Context Saved")
+            output.append("")
+            
+            cont = result["continuation_saved"]
+            output.append(f"📋 Project: {result['project']}")
+            output.append(f"🎯 Task: {cont.get('task', 'N/A')}")
+            output.append(f"📊 Last Result: {cont.get('result', 'N/A')}")
+            output.append(f"📍 Position: {cont.get('position', 'N/A')}")
+            output.append(f"➡️  Next: {cont.get('next', 'N/A')}")
+            
+            if cont.get("files"):
+                output.append("\n📁 Active Files:")
+                for file in cont["files"][:5]:
+                    output.append(f"  • {file['path']} ({file['relevance']})")
+            
+            if cont.get("commands"):
+                output.append("\n⚡ Recent Commands:")
+                for cmd in cont["commands"][:3]:
+                    status_icon = "✅" if cmd['status'] == "success" else "❌"
+                    output.append(f"  {status_icon} {cmd['cmd']}")
+            
+            if cont.get("context"):
+                output.append(f"\n💡 Context: {cont['context']}")
+            
+            output.append("")
+            output.append(result.get("message", ""))
+        else:
+            output.append("❌ " + result.get("error", "Unknown error"))
         
         return "\n".join(output)
 
     def _format_start_output(self, result: Dict) -> str:
-        """Format lo_start output for display"""
+        """Format enhanced lo_start output for display"""
         output = []
         
         if "error" in result:
@@ -783,57 +1054,60 @@ class LogSecCore:
         output.append(f"🚀 {project_name.title()} Quick Start")
         output.append("")
         
-        # NEU: Tier 2 Context anzeigen
-        if "project_context" in result:
-            ctx = result["project_context"]
-            output.append("📋 Project Information (Tier 2):")
-            
-            if ctx.get("description"):
-                output.append(f"  📝 {ctx['description']}")
-            
-            if ctx.get("current_phase"):
-                output.append(f"  🎯 Phase: {ctx['current_phase']}")
-            
-            if ctx.get("main_directories"):
-                dirs = ctx['main_directories'][:5] if ctx['main_directories'] else []
-                if dirs:
-                    output.append(f"  📂 Directories: {', '.join(dirs)}")
-            
-            output.append("")
+        # Show source of continuation data
+        source = result.get("source", "unknown")
+        if source == "enhanced_continuation":
+            output.append("✨ Using enhanced continuation data")
+        else:
+            output.append("📝 Using legacy session data")
+        output.append("")
         
-        # Session Context
-        if "session_context" in result:
+        # Enhanced continuation data
+        if "continuation_data" in result:
+            cont = result["continuation_data"]
+            output.append(f"🎯 Continuing: {cont.get('task', 'Previous work')}")
+            output.append("")
+            output.append("📊 Last Result:")
+            output.append(f"{cont.get('result', 'No recent results')}")
+            output.append("")
+            output.append("📍 Position:")
+            output.append(f"{cont.get('position', 'Unknown position')}")
+            output.append("")
+            
+            if cont.get("files"):
+                output.append("📁 Active Files:")
+                for file in cont["files"][:5]:
+                    icon = "✏️" if file['relevance'] == "edited" else "👁️"
+                    output.append(f"  {icon} {file['path']}")
+                output.append("")
+            
+            if cont.get("commands"):
+                output.append("⚡ Recent Commands:")
+                for cmd in cont["commands"][:3]:
+                    status = "✅" if cmd['status'] == "success" else "❌"
+                    output.append(f"  {status} {cmd['cmd']}")
+                output.append("")
+            
+            output.append("➡️  Next Step:")
+            output.append(cont.get('next', 'Continue development'))
+            
+            if cont.get("context"):
+                output.append("")
+                output.append(f"💡 Context: {cont['context']}")
+        
+        # Legacy session context (fallback)
+        elif "session_context" in result:
             context = result["session_context"]
             output.append("🔄 Last Session:")
             output.append(f"  • ID: {context.get('session_id', 'N/A')}")
-            output.append(f"  • Time: {context.get('timestamp', 'N/A')[:16] if context.get('timestamp') else 'N/A'}")
+            output.append(f"  • Time: {context.get('timestamp', 'N/A')}")
             
-            if context.get('status'):
-                output.append(f"  • Status: {context['status']}")
-            if context.get('position'):
-                output.append(f"  • Position: {context['position']}")
-            if context.get('next_steps'):
-                output.append(f"  • Next: {context['next_steps']}")
-            
-            output.append("")
-        
-        # Workspace Context  
-        if "workspace_context" in result:
-            workspace = result["workspace_context"]
-            if workspace and isinstance(workspace, dict):
-                for proj, data in workspace.items():
-                    if proj == project_name:  # Only show current project
-                        output.append("📁 Workspace Context:")
-                        
-                        if data.get('files'):
-                            output.append("  🗄️ Recent Files:")
-                            for f in sorted(list(data['files']))[:5]:
-                                output.append(f"    • {f}")
-                        
-                        if data.get('directories'):
-                            output.append("  📂 Working Directories:")
-                            for d in sorted(list(data['directories']))[:3]:
-                                output.append(f"    • {d}")
+            if context.get("status"):
+                output.append(f"\n📌 Status: {context['status']}")
+            if context.get("position"):
+                output.append(f"📍 Position: {str(context['position'])}")
+            if context.get("next_steps"):
+                output.append(f"➡️  Next: {context['next_steps']}")
         
         output.append("")
         output.append("🎯 Ready to continue!")
@@ -895,14 +1169,14 @@ class LogSecCore:
                         },
                         {
                             "name": "lo_cont",
-                            "description": "Continue from previous session with context",
+                            "description": "Auto-extract continuation context from current session",
                             "inputSchema": {
                                 "type": "object",
                                 "properties": {
-                                    "query": {"type": "string", "description": "Continuation context/query"},
-                                    "language": {"type": "string", "enum": ["en", "de"], "description": "Language (en/de)"}
+                                    "project_name": {"type": "string", "description": "Project name (REQUIRED)"},
+                                    "mode": {"type": "string", "enum": ["auto", "debug", "implement", "refactor", "document"], "description": "Focus mode (default: auto)"}
                                 },
-                                "required": ["query"]
+                                "required": ["project_name"]
                             }
                         },
                         {
@@ -1093,7 +1367,7 @@ class LogSecCore:
         # NEU: Extract documentation files
         in_docs = False
         for line in lines:
-            if '## Documentation' in line and 'Files' in line:
+            if '## Documentation Files' in line:
                 in_docs = True
                 continue
             elif in_docs and line.strip().startswith('##'):
