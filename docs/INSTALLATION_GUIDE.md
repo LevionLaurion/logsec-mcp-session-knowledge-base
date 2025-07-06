@@ -3,35 +3,38 @@
 ## Prerequisites
 
 - Python 3.9 or higher
-- Claude Desktop
-- Desktop Commander MCP server (for DC operations tracking)
+- Claude Desktop application
+- Windows, macOS, or Linux operating system
 
-## Quick Install
+## Installation Steps
 
-### 1. Clone Repository
+### 1. Clone the Repository
 
 ```bash
 git clone https://github.com/LevionLaurion/logsec-mcp-session-knowledge-base.git C:\LogSec
 cd C:\LogSec
 ```
 
-Or download and extract ZIP to `C:\LogSec`
-
-### 2. Install Dependencies
-
+For Unix/macOS:
 ```bash
-pip install -r requirements.txt
+git clone https://github.com/LevionLaurion/logsec-mcp-session-knowledge-base.git ~/LogSec
+cd ~/LogSec
 ```
 
-Required packages:
-- mcp==1.1.0
-- sentence-transformers
-- numpy
-- nltk
+### 2. Verify Installation
 
-### 3. Claude Desktop Configuration
+```bash
+python --version  # Should show Python 3.9+
+python src/logsec_core_v3.py  # Should start without errors, Ctrl+C to exit
+```
 
-Add to `%APPDATA%\Claude\claude_desktop_config.json`:
+### 3. Configure Claude Desktop
+
+Add LogSec to your Claude Desktop configuration:
+
+**Windows:**
+1. Open `%APPDATA%\Claude\claude_desktop_config.json`
+2. Add the following configuration:
 
 ```json
 {
@@ -39,86 +42,85 @@ Add to `%APPDATA%\Claude\claude_desktop_config.json`:
     "logsec": {
       "command": "python",
       "args": ["C:\\LogSec\\src\\logsec_core_v3.py"],
-      "env": {}
+      "cwd": "C:\\LogSec",
+      "env": {
+        "PYTHONPATH": "C:\\LogSec",
+        "PYTHONIOENCODING": "utf-8"
+      }
     }
   }
 }
 ```
 
-### 4. Verify Installation
+**macOS/Linux:**
+1. Open `~/.config/Claude/claude_desktop_config.json`
+2. Add the following configuration:
 
-1. Restart Claude Desktop
-2. Look for "logsec" in the 🔌 menu
-3. Test with: `lo_start test_project`
-
-## Desktop Commander Integration
-
-LogSec automatically reads DC logs from:
-```
-%APPDATA%\Claude\logs\mcp-server-desktop-commander.log
-```
-
-No additional configuration needed - just ensure Desktop Commander is installed and active.
-
-## Configuration Options
-
-Edit `src/config.py` to customize:
-
-```python
-# Performance settings
-ENABLE_VECTOR_SEARCH = False  # Set True for semantic search (slower startup)
-
-# Logging
-LOG_FILE = "logsec.log"
-LOG_LEVEL = logging.INFO
+```json
+{
+  "mcpServers": {
+    "logsec": {
+      "command": "python3",
+      "args": ["/home/username/LogSec/src/logsec_core_v3.py"],
+      "cwd": "/home/username/LogSec",
+      "env": {
+        "PYTHONPATH": "/home/username/LogSec",
+        "PYTHONIOENCODING": "utf-8"
+      }
+    }
+  }
+}
 ```
 
-## Directory Structure
+### 4. Restart Claude Desktop
 
+Close and restart Claude Desktop to load the MCP server.
+
+### 5. Verify MCP Connection
+
+In Claude, try:
 ```
-C:\LogSec\
-├── src/
-│   ├── logsec_core_v3.py      # Main server
-│   ├── config.py              # Settings
-│   └── modules/               # Core modules
-├── data/
-│   ├── logsec.db             # Main database
-│   └── continuation/         # Continuation files
-└── docs/                     # Documentation
+lo_start test
 ```
+
+You should see a response confirming the session start.
+
+## Configuration
+
+LogSec configuration is stored in `src/config/config.json`:
+
+```json
+{
+  "db_path": "C:\\LogSec\\data\\database\\logsec_phase3.db",
+  "projects_dir": "C:\\LogSec\\data\\projects",
+  "templates_dir": "C:\\LogSec\\data\\templates"
+}
+```
+
+Adjust paths as needed for your system.
 
 ## Troubleshooting
 
-### "logsec not found" in Claude
-1. Check config.json syntax (valid JSON)
-2. Verify Python path
-3. Restart Claude Desktop
+### MCP Server Not Found
 
-### "Module not found" errors
-```bash
-pip install -r requirements.txt --upgrade
-```
+- Ensure Python path is correct in `claude_desktop_config.json`
+- Check that `logsec_core_v3.py` exists in the `src` directory
+- Verify Python is in your system PATH
 
-### DC operations not tracked
-1. Verify Desktop Commander is running
-2. Check log file exists at `%APPDATA%\Claude\logs\`
-3. Ensure write permissions
+### Permission Errors
 
-### Slow startup with vector search
-Normal behavior when `ENABLE_VECTOR_SEARCH = True`
-- First load: ~20 seconds
-- Solution: Set to `False` for fast startup
+- Ensure you have write permissions to the LogSec directory
+- On Unix systems, you may need to make the script executable:
+  ```bash
+  chmod +x src/logsec_core_v3.py
+  ```
 
-## Updating LogSec
+### Import Errors
 
-```bash
-cd C:\LogSec
-git pull
-pip install -r requirements.txt --upgrade
-```
+- LogSec uses only Python standard library
+- No external dependencies should be needed
+- Ensure Python 3.9+ is installed
 
-## Uninstalling
+## Next Steps
 
-1. Remove from claude_desktop_config.json
-2. Delete C:\LogSec directory
-3. (Optional) Remove continuation files from Documents
+See the main [README](../README.md) for usage instructions and examples.

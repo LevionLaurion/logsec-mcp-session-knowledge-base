@@ -2,6 +2,31 @@
 
 All notable changes to LogSec MCP Session Knowledge Base will be documented in this file.
 
+## [3.1.0] - 2025-01-06
+
+### Changed
+- **Major Refactoring**: Reduced codebase from 2,914 to 563 lines (81% reduction)
+- Simplified architecture - removed unnecessary modules and managers
+- Migrated to template-based instruction system
+- Reorganized directory structure for clarity
+- Updated all documentation to professional style without emojis
+
+### Added
+- Universal template system for cross-project compatibility
+- Configurable templates in `data/templates/` directory
+
+### Removed
+- Unused modules directory with 10+ files
+- Legacy core components (tier2_manager, continuation_parser)
+- Redundant test files
+- Old scripts and utilities
+- Duplicate code paths
+
+### Fixed
+- Case sensitivity issues in project names
+- SQL query formatting problems
+- Path handling inconsistencies
+
 ## [3.0.2] - 2025-01-06
 
 ### Changed

@@ -1,0 +1,8 @@
+{
+  "db_path": "C:\\LogSec\\data\\database\\logsec_phase3.db",
+  "projects_dir": "C:\\LogSec\\data\\projects",
+  "templates_dir": "C:\\LogSec\\data\\templates",
+  "archive_dir": "C:\\LogSec\\archive",
+  "default_author": "User",
+  "structure_version": "3.0-clean"
+}

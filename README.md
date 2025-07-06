@@ -3,152 +3,127 @@
 [![MCP](https://img.shields.io/badge/MCP-2024--11--05-blue)](https://modelcontextprotocol.io)
 [![Python](https://img.shields.io/badge/Python-3.9+-green)](https://python.org)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
-[![Status](https://img.shields.io/badge/Status-Production--Ready-success)](https://github.com/LevionLaurion/logsec-mcp-session-knowledge-base)
-[![Last Commit](https://img.shields.io/github/last-commit/LevionLaurion/logsec-mcp-session-knowledge-base)](https://github.com/LevionLaurion/logsec-mcp-session-knowledge-base/commits/master)
 
 Knowledge management system for AI session continuity, built as a Model Context Protocol (MCP) server.
 
 ## Overview
 
-LogSec helps Claude maintain context across sessions by providing project knowledge management, semantic search, and structured session continuation.
+LogSec provides persistent memory for AI assistants through a clean 3-tier architecture. The system enables context preservation across conversations with minimal overhead.
 
 ### Core Features
 
-- **Project Context Management**: Organize knowledge by project with automatic classification
-- **Desktop Commander Integration**: Automatic tracking of file operations from DC logs
-- **Semantic Search**: Find relevant sessions using natural language queries
-- **Session Continuity**: Structured handoffs between sessions with continuation files
-- **Auto-Classification**: Automatic categorization into 8 knowledge types
-
-## Quick Start
-
-```bash
-# Clone the repository
-git clone https://github.com/LevionLaurion/logsec-mcp-session-knowledge-base.git C:\LogSec
-cd C:\LogSec
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Test installation
-python tests/test_core_v3.py
-
-# Configure Claude Desktop (see Installation Guide)
-```
-
-## Basic Usage
-
-```python
-lo_start("project_name")              # Quick start with context
-lo_save("project_name", "content")    # Save session with DC tracking
-lo_load("project_name")               # Load project overview
-lo_load("project_name", "query")      # Search sessions
-lo_cont("project_name")               # Generate continuation context
-lo_update("project_name")             # Update project documentation
-```
-
-## Architecture
-
-LogSec implements a 3-tier knowledge architecture:
-
-1. **Tier 1**: Quick summaries and recent activity
-2. **Tier 2**: Structured project documentation (README in database)
-3. **Tier 3**: Full session database with semantic search
-
-### Directory Structure
-
-```
-C:\LogSec\
-├── src/
-│   ├── logsec_core_v3.py          # Main MCP server
-│   ├── config.py                  # Configuration
-│   └── modules/                   # Feature modules
-│       ├── log_sniffer.py         # DC log reader
-│       ├── embedding_engine.py    # Lazy loaded vectors
-│       └── ...                    # Other modules
-├── data/
-│   ├── logsec.db                 # SQLite database
-│   └── continuation/             # Continuation files
-└── docs/                         # Documentation
-```
-
-## Desktop Commander Integration
-
-LogSec automatically reads Desktop Commander logs to track file operations:
-
-- Reads from: `%APPDATA%\Claude\logs\mcp-server-desktop-commander.log`
-- Tracks: read_file, write_file, edit_block, execute_command, etc.
-- Stores in `dc_operations` table with duplicate prevention
-- No configuration needed - works automatically when DC is active
-
-## Knowledge Types
-
-Automatically categorizes content into 8 types:
-
-- **milestone** - Major achievements and releases
-- **implementation** - Code implementations and features
-- **error_solution** - Bug fixes and troubleshooting
-- **technical_decision** - Architecture and design choices
-- **research_exploration** - Technical investigations
-- **documentation** - Documentation and guides
-- **optimization** - Performance improvements
-- **general_progress** - Other project updates
-
-## Performance
-
-- Lazy-loaded vector search (loads on first use)
-- Pure database storage - no file I/O overhead
-- Duplicate prevention via UNIQUE constraints
-
-## Configuration
-
-Edit `src/config.py`:
-
-```python
-ENABLE_VECTOR_SEARCH = False  # Set True for semantic search (slower startup)
-```
+- **Session Persistence**: SQLite-based storage for conversation history
+- **Project Organization**: Isolated knowledge bases per project
+- **Search Capability**: Keyword-based content retrieval
+- **Continuation System**: Structured session handoffs
+- **Template Engine**: Customizable response patterns
 
 ## Installation
 
-See [docs/INSTALLATION_GUIDE.md](docs/INSTALLATION_GUIDE.md) for detailed setup instructions.
+```bash
+# Clone repository
+git clone https://github.com/LevionLaurion/logsec-mcp-session-knowledge-base.git
+cd LogSec
 
-Add to your `claude_desktop_config.json`:
-
-```json
+# Configure Claude Desktop
+# Add to %APPDATA%\Claude\claude_desktop_config.json:
 {
   "mcpServers": {
     "logsec": {
       "command": "python",
       "args": ["C:\\LogSec\\src\\logsec_core_v3.py"],
-      "env": {}
+      "cwd": "C:\\LogSec"
     }
   }
 }
+
+# Restart Claude Desktop
 ```
 
-## Documentation
+## Usage
 
-- [Installation Guide](docs/INSTALLATION_GUIDE.md) - Step-by-step setup
-- [Developer Reference](docs/DEVELOPER_REFERENCE.md) - Complete API documentation
-- [Database Architecture](docs/DATABASE_ARCHITECTURE.md) - Schema and design
-- [Implementation Status](docs/IMPLEMENTATION_STATUS.md) - Current features
-- [Workspace Context](docs/WORKSPACE_CONTEXT.md) - DC integration details
+### Basic Commands
 
-## Testing
+```
+lo_start <project>     # Initialize session with continuation
+lo_save <project>      # Save current context
+lo_load <project>      # Load project knowledge
+lo_update <project>    # Generate project documentation
+lo_cont <project>      # Create continuation file
+```
+
+### Examples
+
+```
+lo_start myproject
+lo_save myproject "Implementation details for the API endpoint"
+lo_load myproject "API"
+```
+
+## Architecture
+
+### Directory Structure
+
+```
+LogSec/
+├── src/
+│   ├── logsec_core_v3.py    # Main MCP server (563 lines)
+│   └── config/
+│       └── config.json      # Configuration
+├── data/
+│   ├── projects/            # Project data
+│   │   └── {project}/
+│   │       ├── readme.md
+│   │       └── continuation.md
+│   ├── database/
+│   │   └── logsec_phase3.db # Session storage
+│   └── templates/           # Response templates
+└── docs/
+    └── DIRECTORY_STRUCTURE.md
+```
+
+### Implementation
+
+The system implements the Model Context Protocol with:
+- JSON-RPC message handling
+- Tool registration and dispatch
+- Error handling and logging
+- Template-based responses
+
+## Configuration
+
+Configuration via `src/config/config.json`:
+
+```json
+{
+  "db_path": "C:\\LogSec\\data\\database\\logsec_phase3.db",
+  "projects_dir": "C:\\LogSec\\data\\projects",
+  "templates_dir": "C:\\LogSec\\data\\templates"
+}
+```
+
+## Development
+
+### Requirements
+
+- Python 3.9+
+- No external dependencies (uses stdlib only)
+- Windows/Linux/macOS compatible
+
+### Testing
 
 ```bash
-# Run test suite
-python tests/test_core_v3.py
+python -m unittest discover tests/
 ```
-
-## License
-
-MIT License - See LICENSE file for details.
 
 ## Contributing
 
-Contributions welcome. Please follow existing code style and include tests for new features.
+1. Fork the repository
+2. Create feature branch
+3. Commit changes
+4. Push to branch
+5. Create Pull Request
 
-## Support
+## License
 
-For issues or questions, please use GitHub issues or contact via repository.
+MIT License - see LICENSE file for details.
