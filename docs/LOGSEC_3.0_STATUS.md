@@ -1,30 +1,44 @@
 # LogSec 3.0 - Current Status & Overview
 
-**Last Updated**: 05.07.2025  
+**Last Updated**: 06.07.2025  
 **Server Status**: ✅ Running with MCP  
-**Implementation**: Core features implemented
+**Implementation**: Tier 2 Integration Complete ✨
 
 ## 🚀 Available API
 
 ### Core Commands
 ```bash
-lo_load project_name              # Project context + recent activity  
-lo_load project_name "query"      # Project context + vector search
-lo_save "content" project_name    # Auto-classification + vector embedding
+lo_load project_name              # Tier 2 context + recent activity  
+lo_load project_name "query"      # Tier 2 context + vector search
+lo_save project_name              # Request summary from Claude
+lo_save project_name "content"    # Save with auto-classification
 lo_cont "continuation_context"    # Structured session continuation
-lo_start project_name             # Session continuation with workspace context
+lo_start project_name             # Quick start with Tier 2 data
 ```
 
 ## 🎯 **LogSec 3.0 Features**
 
 **Implemented features**:
-- ✅ **Project Isolation** - Separation between projects
+- ✅ **3-Tier Architecture** - Tier 2 always loaded for Claude context
+- ✅ **Project Isolation** - Clean separation between projects
 - ✅ **Two-Mode lo_load** - Summary Mode & Vector Search Mode
-- ✅ **Session Continuation** - lo_start with workspace context
+- ✅ **Enhanced lo_save** - Auto-summary request if no content
+- ✅ **Session Continuation** - lo_start with full Tier 2 context
 - ✅ **Auto-Classification** - Categorization into 8 knowledge types
-- ✅ **Vector Search** - Semantic search with FAISS & Sentence Transformers
+- ✅ **Vector Search** - Semantic search with embeddings
 - ✅ **Auto-Tagging** - NLP-based tag extraction
 - ✅ **SQLite Database** - With vector storage & indices
+- ✅ **README Parser** - Extracts structured project data
+- ✅ **Project Context** - Root path, GitHub URL, directories
+
+## 📊 Recent Updates (06.07.2025)
+
+### Tier 2 Integration Complete
+- **lo_load** now ALWAYS includes Tier 2 project context
+- **lo_save** validates project name, offers auto-summary
+- **lo_start** loads Tier 2 data for better continuation
+- **README Parser** extracts project metadata automatically
+- **Display Instructions** ensure proper formatting in Claude
 
 ## 📁 Project Structure
 

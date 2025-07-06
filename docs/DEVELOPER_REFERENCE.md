@@ -45,31 +45,49 @@ lo_load("logsec", "API integration")
 }
 ```
 
-#### `lo_save(content, project_name, session_id=None)`
-**Save content with automatic classification and vector embedding**
+#### `lo_save(project_name, content=None, session_id=None)`
+**Save knowledge with auto-summary or specific content**
 
 ```python
-lo_save("""
+# Mode 1: Request auto-summary from Claude
+result = lo_save("logsec")
+# Returns request for Claude to summarize the session
+
+# Mode 2: Save specific content
+lo_save("logsec", """
 # API Integration Complete
 - Implemented REST endpoints
 - Added MCP server support
 - Vector search operational
-""", "logsec")
+""")
 ```
 
 **Parameters:**
-- `content` (str, required): Content to save
-- `project_name` (str, required): Target project
+- `project_name` (str, required): Target project (alphanumeric + _-)
+- `content` (str, optional): Content to save. If omitted, requests summary
 - `session_id` (str, optional): Custom session ID
 
-**Returns:**
+**Returns (Mode 1 - Summary Request):**
 ```python
 {
     "success": True,
-    "session_id": "session_20250705_225044",
+    "action": "request_summary",
+    "prompt": "Please create a summary of this session including...",
+    "instructions": "After creating the summary, save it with: lo_save logsec \"[your summary]\"",
+    "project_name": "logsec",
+    "session_id": "session_20250706_120000"
+}
+```
+
+**Returns (Mode 2 - Content Saved):**
+```python
+{
+    "session_id": "session_20250706_120000",
+    "project": "logsec",
     "knowledge_type": "milestone",
     "tags": ["api", "integration", "mcp", "vector_search"],
-    "confidence": 0.89
+    "confidence": 0.89,
+    "filepath": "C:\\LogSec\\data\\sessions\\session_20250706_120000_logsec.md"
 }
 ```
 
