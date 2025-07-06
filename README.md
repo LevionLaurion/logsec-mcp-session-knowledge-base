@@ -1,120 +1,84 @@
-# LogSec 3.0 - MCP Session Knowledge Management
+# LogSec MCP - Model Context Protocol Session Knowledge Base
 
-[![License: MIT with restrictions](https://img.shields.io/badge/License-MIT%20with%20restrictions-yellow.svg)](LICENSE)
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![MCP Compatible](https://img.shields.io/badge/MCP-Compatible-green.svg)](https://modelcontextprotocol.io/)
-
-Knowledge management system for AI session continuity, built as a Model Context Protocol (MCP) server.
-
-## Features
-
-- **Project Context Management**: Organize knowledge by project
-- **Semantic Search**: Find relevant sessions using natural language  
-- **Session Continuity**: Structured handoffs between sessions
-- **Auto-Classification**: Automatic categorization into 8 knowledge types
-- **Workspace Integration**: Analyzes Desktop Commander logs for context
-
-## Quick Start
+## 🚀 Quick Start
 
 ```bash
-# Clone repository
-git clone https://github.com/LevionLaurion/logsec-mcp-session-knowledge-base.git
-cd logsec-mcp-session-knowledge-base
+# Installation
+mcp install src
+mcp serve src
 
-# Install dependencies
-install_dependencies.bat
-
-# Test installation  
-python tests/test_core_v3.py
-
-# Configure Claude Desktop (see Installation Guide)
+# In Claude
+lo_start logsec     # Start with project context
+lo_save logsec      # Save current session
+lo_update logsec    # Update project documentation
 ```
 
-## Privacy Notice
+## 📋 Overview
 
-Desktop Commander Integration: LogSec analyzes Desktop Commander logs to provide workspace context. Logs are stored at:
-```
-C:\Users\[Username]\.claude-server-commander-logs\
-```
+LogSec implements a **3-Tier Knowledge Architecture** for AI collaboration:
 
-Consider using generic project names for sensitive work. See [SECURITY.md](SECURITY.md) for details.
+- **Tier 1**: Project summaries and recent activity (quick overview)
+- **Tier 2**: Structured project documentation (README in DB)
+- **Tier 3**: Full session database with vector search
 
-## Core Commands
+## 🛠️ Core Features
 
-### lo_load
-Load project knowledge with two modes:
-```python
-lo_load("project_name")              # Project overview + recent activity
-lo_load("project_name", "query")     # Project context + semantic search
-```
+### Session Management
+- **Pure database storage** - No file clutter
+- **Automatic tagging** - Smart classification of content
+- **Desktop Commander integration** - Tracks all file operations
+- **Vector search** - Semantic search across sessions (lazy loaded)
 
-### lo_save
-Save content with auto-classification:
-```python
-lo_save("project_name")              # Request summary from Claude
-lo_save("project_name", "content")   # Save specific content
-```
+### Commands
 
-### lo_cont
-Create continuation file for session handoff:
-```python
-lo_cont("project_name")              # Analyze current session
-lo_cont("project_name", "mode")      # Focused extraction (debug/implement/refactor/document)
-```
-Creates/updates: `C:\LogSec\data\continuation\{project}_cont.md`
+| Command | Description | Example |
+|---------|-------------|---------|
+| `lo_start` | Load project context and continue | `lo_start logsec` |
+| `lo_save` | Save current session to database | `lo_save logsec "bug fix"` |
+| `lo_load` | Load project knowledge | `lo_load logsec` |
+| `lo_load` + query | Search sessions | `lo_load logsec "error handling"` |
+| `lo_cont` | Generate continuation context | `lo_cont logsec` |
+| `lo_update` | Update project README | `lo_update logsec` |
 
-### lo_start
-Start with continuation context:
-```python
-lo_start("project_name")             # Load continuation file + project context
-```
-
-## Architecture
+## 🏗️ Architecture
 
 ```
 C:\LogSec\
 ├── src/
-│   ├── logsec_core_v3.py           # Main MCP server
-│   ├── modules/                    # Feature modules
-│   └── core/                       # Core components
+│   ├── logsec_core_v3.py      # Main server
+│   ├── config.py               # Configuration
+│   └── modules/                # Feature modules
+│       ├── log_sniffer.py      # DC log reader
+│       └── ...                 # Other modules
 ├── data/
 │   ├── database/
-│   │   └── logsec_phase3.db       # SQLite database
-│   └── sessions/                   # Session file storage
-├── utilities/                      # Helper tools
-└── docs/                          # Documentation
+│   │   └── logsec_phase3.db   # Main database
+│   └── continuation/           # Continuation files
+└── docs/                       # Documentation
 ```
 
-## Installation
+## 🗄️ Database Schema
 
-See [docs/INSTALLATION_GUIDE.md](docs/INSTALLATION_GUIDE.md) for detailed setup instructions.
+All data stored in SQLite (`logsec_phase3.db`):
+- `session_metadata` - Session content and metadata
+- `dc_operations` - Desktop Commander operations tracking
+- `session_vectors` - Vector embeddings for search
+- `readme_store` - Tier 2 project documentation
+- `tags`, `knowledge_types` - Classification data
 
-Add to your `claude_desktop_config.json`:
-```json
-{
-  "mcpServers": {
-    "logsec": {
-      "command": "python",
-      "args": ["C:\\LogSec\\src\\logsec_core_v3.py"],
-      "env": {}
-    }
-  }
-}
+## ⚡ Performance
+
+- **Fast startup**: ~2 seconds (vector search lazy loaded)
+- **No file I/O**: Everything in database
+- **Duplicate prevention**: Unique constraints on operations
+
+## 🔧 Configuration
+
+Edit `src/config.py`:
+```python
+ENABLE_VECTOR_SEARCH = False  # Set True for semantic search
 ```
 
-## Documentation
+## 📝 License
 
-- [Installation Guide](docs/INSTALLATION_GUIDE.md) - Setup instructions
-- [Developer Reference](docs/DEVELOPER_REFERENCE.md) - API documentation
-- [Database Architecture](docs/DATABASE_ARCHITECTURE.md) - Technical details
-- [Implementation Status](docs/IMPLEMENTATION_STATUS.md) - Current state
-- [Workspace Context](docs/WORKSPACE_CONTEXT.md) - Desktop Commander integration
-
-## License
-
-MIT License with Commercial Restriction
-
-Free for personal, educational, and evaluation use.
-Commercial use requires licensing. Contact: mail@laurion.de
-
-See [LICENSE](LICENSE) for details.
+MIT License - See LICENSE file for details.

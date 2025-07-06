@@ -50,9 +50,30 @@ except ImportError as e:
         def classify_knowledge_type(self, content): return ("general", 0.5)
 
 try:
-    from modules.embedding_engine import EmbeddingEngine
-    from modules.vector_search import VectorSearchEngine
-    HAS_VECTOR_SEARCH = True
+    from modules.log_sniffer import LogSniffer
+    HAS_LOG_SNIFFER = True
+except ImportError as e:
+    print(f"Warning: Could not import LogSniffer: {e}", file=sys.stderr)
+    HAS_LOG_SNIFFER = False
+    class LogSniffer:
+        def extract_new_operations(self, project_name): return []
+
+try:
+    from config import ENABLE_VECTOR_SEARCH
+except ImportError:
+    ENABLE_VECTOR_SEARCH = True  # Default to enabled if no config
+
+try:
+    if ENABLE_VECTOR_SEARCH:
+        from modules.embedding_engine import EmbeddingEngine
+        from modules.vector_search import VectorSearchEngine
+        HAS_VECTOR_SEARCH = True
+    else:
+        HAS_VECTOR_SEARCH = False
+        class EmbeddingEngine:
+            def generate_embedding(self, text): return np.zeros(384)
+        class VectorSearchEngine:
+            def search_project(self, project, embedding): return []
 except ImportError as e:
     print(f"Warning: Could not import Vector Search modules: {e}", file=sys.stderr)
     HAS_VECTOR_SEARCH = False
@@ -65,14 +86,16 @@ class DesktopCommanderParser:
     """Extract Desktop Commander operations from session content"""
     
     DC_PATTERNS = {
-        'read_file': r'<parameter name="path">(.*?)</parameter>',
-        'write_file': r'<parameter name="path">(.*?)</parameter>',
-        'list_directory': r'<parameter name="path">(.*?)</parameter>',
-        'execute_command': r'<parameter name="command">(.*?)</parameter>',
-        'edit_block': r'<parameter name="file_path">(.*?)</parameter>',
-        'move_file': r'<parameter name="(?:source|destination)">(.*?)</parameter>',
-        'create_directory': r'<parameter name="path">(.*?)</parameter>',
-        'search_files': r'<parameter name="path">(.*?)</parameter>'
+        'read_file': r'<(?:antml:)?parameter name="path">(.*?)</(?:antml:)?parameter>',
+        'write_file': r'<(?:antml:)?parameter name="path">(.*?)</(?:antml:)?parameter>',
+        'list_directory': r'<(?:antml:)?parameter name="path">(.*?)</(?:antml:)?parameter>',
+        'execute_command': r'<(?:antml:)?parameter name="command">(.*?)</(?:antml:)?parameter>',
+        'edit_block': r'<(?:antml:)?parameter name="file_path">(.*?)</(?:antml:)?parameter>',
+        'move_file': r'<(?:antml:)?parameter name="(?:source|destination)">(.*?)</(?:antml:)?parameter>',
+        'create_directory': r'<(?:antml:)?parameter name="path">(.*?)</(?:antml:)?parameter>',
+        'search_files': r'<(?:antml:)?parameter name="path">(.*?)</(?:antml:)?parameter>',
+        'search_code': r'<(?:antml:)?parameter name="path">(.*?)</(?:antml:)?parameter>',
+        'get_file_info': r'<(?:antml:)?parameter name="path">(.*?)</(?:antml:)?parameter>'
     }
     
     def __init__(self):
@@ -82,8 +105,8 @@ class DesktopCommanderParser:
         """Extract all DC operations from content"""
         operations = []
         
-        # Find all function calls
-        function_pattern = r'<invoke name="desktop-commander:(\w+)">(.*?)</invoke>'
+        # Find all function calls (both formats)
+        function_pattern = r'<(?:antml:)?invoke name="desktop-commander:(\w+)">(.*?)</(?:antml:)?invoke>'
         matches = re.findall(function_pattern, content, re.DOTALL)
         
         for op_type, params in matches:
@@ -250,15 +273,35 @@ class LogSecCore:
         self.dc_parser = DesktopCommanderParser()
         self.workspace_gen = WorkspaceContextGenerator()
         
-        # Initialize Vector Search (if available)
-        if HAS_VECTOR_SEARCH:
-            self.embedding_engine = EmbeddingEngine()
-            self.vector_search = VectorSearchEngine()
-            print("Vector Search Engine initialized", file=sys.stderr)
+        # Initialize Log Sniffer
+        if HAS_LOG_SNIFFER:
+            self.log_sniffer = LogSniffer()
+            print("Log Sniffer initialized", file=sys.stderr)
         else:
-            self.embedding_engine = None
-            self.vector_search = None
-            print("Vector Search not available - using fallback", file=sys.stderr)
+            self.log_sniffer = None
+            print("Log Sniffer not available", file=sys.stderr)
+        
+        # Initialize Vector Search (lazy loading)
+        self.embedding_engine = None
+        self.vector_search = None
+        self._vector_search_initialized = False
+        print("Vector Search will be loaded on demand (lazy loading)", file=sys.stderr)
+    
+    def _ensure_vector_search(self):
+        """Lazy load vector search when needed"""
+        if not self._vector_search_initialized and HAS_VECTOR_SEARCH:
+            try:
+                print("Lazy loading Vector Search Engine...", file=sys.stderr)
+                from modules.embedding_engine import EmbeddingEngine
+                from modules.vector_search import VectorSearchEngine
+                self.embedding_engine = EmbeddingEngine()
+                self.vector_search = VectorSearchEngine()
+                self._vector_search_initialized = True
+                print("Vector Search Engine loaded successfully", file=sys.stderr)
+            except Exception as e:
+                print(f"Failed to load Vector Search: {e}", file=sys.stderr)
+                self.embedding_engine = None
+                self.vector_search = None
     
     def _ensure_structure(self):
         """Ensure all directories exist"""
@@ -385,14 +428,40 @@ class LogSecCore:
             
             session_id = session_id or self._generate_session_id()
             
+            # Extract and save Desktop Commander operations from LOG FILE
+            try:
+                if HAS_LOG_SNIFFER and self.log_sniffer:
+                    dc_operations = self.log_sniffer.extract_new_operations(project_name)
+                    
+                    # Save DC operations to database
+                    with sqlite3.connect(self.db_path) as conn:
+                        for op in dc_operations:
+                            conn.execute("""
+                                INSERT OR IGNORE INTO dc_operations
+                                (session_id, project_name, operation_type, path, timestamp)
+                                VALUES (?, ?, ?, ?, ?)
+                            """, (
+                                session_id,
+                                project_name,
+                                op.get('type', ''),
+                                op.get('path', ''),
+                                op.get('timestamp', datetime.now().isoformat())
+                            ))
+                        conn.commit()
+                        
+                    if dc_operations:
+                        print(f"Saved {len(dc_operations)} DC operations from log file for session {session_id}", file=sys.stderr)
+                else:
+                    print("Log Sniffer not available - no DC operations captured", file=sys.stderr)
+            except Exception as e:
+                print(f"Warning: Could not save DC operations: {e}", file=sys.stderr)
+            
             # Auto-tag content
             tags = self.tagger.generate_tags(content)
             tag_list = [tag for tag, score in tags]
             
             # Classify knowledge type
             knowledge_type, confidence = self.classifier.classify_knowledge_type(content)
-            
-            # Save to database
             with sqlite3.connect(self.db_path) as conn:
                 conn.execute("""
                     INSERT OR REPLACE INTO session_metadata 
@@ -409,18 +478,15 @@ class LogSecCore:
                 ))
                 conn.commit()
             
-            # Save content file
-            session_dir = self.base_dir / "data" / "sessions"
-            filename = f"{session_id}_{project_name}.md"
-            filepath = session_dir / filename
-            
-            with open(filepath, 'w', encoding='utf-8') as f:
-                f.write(content)
+            # NO MORE FILE SAVING - Everything in DB!
+            # Removed code that saved to session_dir / filename.md
             
             # Generate and save vector embedding (if vector search available)
             if HAS_VECTOR_SEARCH and self.embedding_engine:
                 try:
-                    embedding = self.embedding_engine.generate_embedding(content)
+                    self._ensure_vector_search()  # Lazy load if needed
+                    if self.embedding_engine:
+                        embedding = self.embedding_engine.generate_embedding(content)
                     # Convert to bytes for storage
                     embedding_bytes = np.array(embedding, dtype=np.float32).tobytes()
                     
@@ -436,13 +502,35 @@ class LogSecCore:
                 except Exception as e:
                     print(f"Warning: Could not save vector embedding: {e}", file=sys.stderr)
             
+            # AUTO-UPDATE TIER 2 README after each save
+            try:
+                # Check if we have enough sessions to make it worthwhile
+                with sqlite3.connect(self.db_path) as conn:
+                    cursor = conn.execute(
+                        "SELECT COUNT(*) FROM session_metadata WHERE project_name = ?",
+                        (project_name,)
+                    )
+                    session_count = cursor.fetchone()[0]
+                
+                # Update README automatically (but don't fail if it doesn't work)
+                if session_count >= 1:  # Update even from first session
+                    print(f"Auto-updating Tier 2 README for {project_name}...", file=sys.stderr)
+                    readme_result = self.lo_update(project_name)
+                    if readme_result.get("success"):
+                        print(f"✓ Tier 2 README updated automatically", file=sys.stderr)
+                    else:
+                        print(f"Warning: Could not auto-update README: {readme_result.get('error', 'Unknown error')}", file=sys.stderr)
+            except Exception as e:
+                print(f"Warning: Auto-update README failed: {e}", file=sys.stderr)
+                # Don't fail the save operation because of this
+            
             return {
                 "session_id": session_id,
                 "project": project_name,
                 "tags": tag_list,
                 "knowledge_type": knowledge_type,
                 "confidence": confidence,
-                "filepath": str(filepath)
+                "message": "Session saved to database (Tier 3)"
             }
             
         except Exception as e:
@@ -623,6 +711,143 @@ Desktop Commander operations from this session:
             print(f"Error in lo_start: {e}", file=sys.stderr)
             return {"error": str(e)}
     
+    def lo_update(self, project_name: str) -> Dict:
+        """Update Tier 2 README from Tier 3 sessions data
+        
+        Analyzes all sessions for a project and updates the structured README
+        """
+        try:
+            if not project_name:
+                return {"error": "project_name is required"}
+            
+            # Check if project exists
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute(
+                    "SELECT COUNT(*) FROM session_metadata WHERE project_name = ?",
+                    (project_name,)
+                )
+                session_count = cursor.fetchone()[0]
+                
+                if session_count == 0:
+                    return {
+                        "error": f"Project '{project_name}' not found",
+                        "suggestion": f"No sessions found for '{project_name}'. Create the project first with: lo_save {project_name}",
+                        "available_projects": self._get_all_projects()
+                    }
+            
+            # Gather data from sessions
+            with sqlite3.connect(self.db_path) as conn:
+                # Get all sessions stats
+                cursor = conn.execute("""
+                    SELECT COUNT(*) as total_sessions,
+                           MIN(timestamp) as first_activity,
+                           MAX(timestamp) as last_activity
+                    FROM session_metadata
+                    WHERE project_name = ?
+                """, (project_name,))
+                stats = cursor.fetchone()
+                
+                # Get knowledge types distribution
+                cursor = conn.execute("""
+                    SELECT knowledge_type, COUNT(*) as count
+                    FROM session_metadata
+                    WHERE project_name = ?
+                    GROUP BY knowledge_type
+                    ORDER BY count DESC
+                """, (project_name,))
+                knowledge_types = [(row[0], row[1]) for row in cursor.fetchall()]
+                
+                # Get most common tags
+                cursor = conn.execute("""
+                    SELECT tags FROM session_metadata
+                    WHERE project_name = ?
+                """, (project_name,))
+                all_tags = []
+                for row in cursor.fetchall():
+                    if row[0]:
+                        tags = json.loads(row[0])
+                        all_tags.extend(tags)
+                
+                from collections import Counter
+                tag_counts = Counter(all_tags).most_common(10)
+            
+            # Detect tech stack from sessions
+            tech_stack = self._detect_tech_stack_from_sessions(project_name)
+            
+            # Detect directories
+            directories = self._detect_project_directories(project_name)
+            
+            # Get existing README
+            existing_readme = self.readme_manager.get_readme(project_name)
+            
+            # Build updated README content
+            readme_content = f"""# {project_name.title()} Project
+
+## Description
+{self._generate_project_description(project_name, knowledge_types, tag_counts)}
+
+## Project Information
+- **Root Directory**: {directories[0] if directories else 'Unknown'}
+- **GitHub Repository**: {self._detect_github_url(project_name)}
+- **Created**: {stats[1][:10] if stats[1] else 'Unknown'}
+- **Last Updated**: {stats[2][:10] if stats[2] else 'Unknown'}
+- **Total Sessions**: {stats[0] or 0}
+
+## Current Status
+- **Phase**: Active Development
+- **Knowledge Types**: {', '.join([kt[0] for kt in knowledge_types[:5]])}
+
+## Tech Stack
+{chr(10).join([f"- {tech}" for tech in tech_stack])}
+
+## Key Directories
+{chr(10).join([f"- {dir}" for dir in directories[:10]])}
+
+## Knowledge Distribution
+{chr(10).join([f"- {kt[0]}: {kt[1]} sessions" for kt in knowledge_types])}
+
+## Common Topics
+{chr(10).join([f"- {tag}: {count} occurrences" for tag, count in tag_counts])}
+
+## Auto-Generated
+This README was automatically generated from {stats[0] or 0} sessions.
+Last updated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+"""
+            
+            # Update in database
+            with sqlite3.connect(self.db_path) as conn:
+                if existing_readme:
+                    conn.execute("""
+                        UPDATE readme_store 
+                        SET content = ?, 
+                            version = version + 1,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE project_name = ?
+                    """, (readme_content, project_name))
+                else:
+                    conn.execute("""
+                        INSERT INTO readme_store (project_name, content)
+                        VALUES (?, ?)
+                    """, (project_name, readme_content))
+                conn.commit()
+            
+            return {
+                "success": True,
+                "project": project_name,
+                "message": f"Tier 2 README updated for {project_name}",
+                "stats": {
+                    "total_sessions": stats[0] or 0,
+                    "knowledge_types": len(knowledge_types),
+                    "directories": len(directories),
+                    "tech_stack": len(tech_stack)
+                },
+                "readme_preview": readme_content[:500] + "..."
+            }
+            
+        except Exception as e:
+            print(f"Error in lo_update: {e}", file=sys.stderr)
+            return {"error": str(e)}
+    
     # Helper methods
     def _generate_session_id(self) -> str:
         """Generate unique session ID"""
@@ -653,14 +878,12 @@ Desktop Commander operations from this session:
         return continuation_data
     
     def _extract_continuation_context(self, project_name: str) -> Dict:
-        """Extract continuation context from current session"""
-        # Get recent sessions for the project
-        recent_sessions = self._get_recent_sessions(project_name, limit=3)
+        """Extract continuation context from current session using DC Operations"""
         
-        # Initialize context with current work
+        # Initialize context
         context = {
             "task": f"Working on {project_name} enhancements",
-            "result": "Implementation and testing in progress",
+            "result": "Implementation and testing in progress", 
             "position": "Multiple files edited",
             "next": "Continue development and testing",
             "files": [],
@@ -668,90 +891,113 @@ Desktop Commander operations from this session:
             "context": ""
         }
         
-        # Analyze recent sessions
-        all_files = {}
+        try:
+            # Get DC Operations from database for this project
+            with sqlite3.connect(self.db_path) as conn:
+                # Get recent file operations
+                cursor = conn.execute("""
+                    SELECT DISTINCT operation_type, path, timestamp
+                    FROM dc_operations
+                    WHERE project_name = ?
+                    AND operation_type IN ('read_file', 'write_file', 'edit_block')
+                    ORDER BY timestamp DESC
+                    LIMIT 20
+                """, (project_name,))
+                
+                file_ops = {}
+                for op_type, path, timestamp in cursor:
+                    if path not in file_ops or op_type in ['write_file', 'edit_block']:
+                        file_ops[path] = {
+                            "path": path,
+                            "relevance": "edited" if op_type in ['write_file', 'edit_block'] else "viewed",
+                            "last_op": op_type,
+                            "timestamp": timestamp
+                        }
+                
+                # Sort by relevance and timestamp
+                sorted_files = sorted(file_ops.values(), 
+                                    key=lambda x: (x['relevance'] == 'edited', x['timestamp']), 
+                                    reverse=True)
+                
+                context['files'] = [
+                    {"path": f['path'], "relevance": f['relevance']} 
+                    for f in sorted_files[:10]
+                ]
+                
+                # Get recent commands
+                cursor = conn.execute("""
+                    SELECT DISTINCT path, timestamp
+                    FROM dc_operations
+                    WHERE project_name = ?
+                    AND operation_type = 'execute_command'
+                    ORDER BY timestamp DESC
+                    LIMIT 10
+                """, (project_name,))
+                
+                context['commands'] = [
+                    {"cmd": cmd[:100], "status": "executed"}
+                    for cmd, _ in cursor
+                ]
+                
+                # Determine position from most recent edited file
+                if sorted_files and sorted_files[0]['relevance'] == 'edited':
+                    context['position'] = f"Last edited: {sorted_files[0]['path']}"
+                
+                # Get directories accessed
+                cursor = conn.execute("""
+                    SELECT DISTINCT path
+                    FROM dc_operations
+                    WHERE project_name = ?
+                    AND operation_type = 'list_directory'
+                    ORDER BY timestamp DESC
+                    LIMIT 5
+                """, (project_name,))
+                
+                dirs = [row[0] for row in cursor]
+                if dirs:
+                    context['context'] = f"Working directories: {', '.join(dirs[:3])}"
+                    
+        except Exception as e:
+            print(f"Warning: Could not extract DC operations for continuation: {e}", file=sys.stderr)
+            
+        # Fallback/Enhancement: Analyze text from recent sessions
         task_found = False
+        recent_sessions = self._get_recent_sessions(project_name, limit=1)
         
-        for session in recent_sessions:
+        if recent_sessions and not task_found:
+            session = recent_sessions[0]
             session_content = self._load_session_content(session['session_id'])
             
-            # Extract Desktop Commander operations
-            dc_operations = self.dc_parser.extract_operations(session_content)
+            # Extract task from content
+            # Look for headers or task descriptions
+            task_patterns = [
+                r'# (.+?)(?:\n|$)',  # Markdown headers
+                r'## What was accomplished:\s*\n- (.+?)(?:\n|$)',
+                r'working on\s+(.+?)(?:\.|$)',
+                r'implementing\s+(.+?)(?:\.|$)',
+                r'Task:\s*(.+?)(?:\.|$)'
+            ]
             
-            for op in dc_operations:
-                if op['type'] in ['read_file', 'write_file', 'edit_block']:
-                    path = op['path']
-                    if self._is_valid_path(path):
-                        relevance = "edited" if op['type'] in ['write_file', 'edit_block'] else "viewed"
-                        # Prioritize edited files
-                        if path not in all_files or relevance == "edited":
-                            all_files[path] = {"path": path, "relevance": relevance}
-                
-                elif op['type'] == 'execute_command':
-                    # Extract commands
-                    context['commands'].append({
-                        "cmd": op['path'][:50],  # Truncate long commands
-                        "status": "executed"
-                    })
+            for pattern in task_patterns:
+                match = re.search(pattern, session_content, re.IGNORECASE | re.MULTILINE)
+                if match:
+                    context['task'] = match.group(1).strip()
+                    task_found = True
+                    break
             
-            # Extract task from content (only from most recent)
-            if not task_found and session == recent_sessions[0]:
-                # Look for headers or task descriptions
-                task_patterns = [
-                    r'# (.+?)(?:\n|$)',  # Markdown headers
-                    r'## What was accomplished:\s*\n- (.+?)(?:\n|$)',
-                    r'working on\s+(.+?)(?:\.|$)',
-                    r'implementing\s+(.+?)(?:\.|$)',
-                    r'Task:\s*(.+?)(?:\.|$)'
-                ]
-                
-                for pattern in task_patterns:
-                    match = re.search(pattern, session_content, re.IGNORECASE | re.MULTILINE)
-                    if match:
-                        context['task'] = match.group(1).strip()
-                        task_found = True
-                        break
-                
-                # Extract result/status
-                result_patterns = [
-                    r'Result:\s*(.+?)(?:\.|$)',
-                    r'✅\s*(.+?)(?:\.|$)',
-                    r'Status:\s*(.+?)(?:\.|$)',
-                    r'## Technical implementation:\s*\n- (.+?)(?:\n|$)'
-                ]
-                
-                for pattern in result_patterns:
-                    match = re.search(pattern, session_content, re.IGNORECASE | re.MULTILINE)
-                    if match:
-                        context['result'] = match.group(1).strip()
-                        break
-                
-                # Extract position if possible
-                if all_files:
-                    # Get the most recently edited file
-                    edited_files = [f for f in all_files.values() if f['relevance'] == 'edited']
-                    if edited_files:
-                        context['position'] = edited_files[0]['path']
-                
-                # Set knowledge type as context
-                if session.get('type'):
-                    context['context'] = f"Session type: {session['type']}"
-                    
-                # Determine next steps based on content
-                if "implementation complete" in session_content.lower():
-                    context['next'] = "Test the implementation and verify functionality"
-                elif "error" in session_content.lower() or "fehler" in session_content.lower():
-                    context['next'] = "Debug and fix identified issues"
-                elif "test" in session_content.lower():
-                    context['next'] = "Run tests and validate implementation"
-        
-        # Sort files by relevance (edited first)
-        sorted_files = sorted(all_files.values(), 
-                            key=lambda x: (0 if x['relevance'] == 'edited' else 1, x['path']))
-        context['files'] = sorted_files[:10]
-        
-        # Limit commands to last 5
-        context['commands'] = context['commands'][-5:]
+            # Extract result/status
+            result_patterns = [
+                r'Result:\s*(.+?)(?:\.|$)',
+                r'✅\s*(.+?)(?:\.|$)',
+                r'Status:\s*(.+?)(?:\.|$)',
+                r'## Technical implementation:\s*\n- (.+?)(?:\n|$)'
+            ]
+            
+            for pattern in result_patterns:
+                match = re.search(pattern, session_content, re.IGNORECASE | re.MULTILINE)
+                if match:
+                    context['result'] = match.group(1).strip()
+                    break
         
         return context
     
@@ -1020,6 +1266,8 @@ Desktop Commander operations from this session:
             return self._format_cont_output(result)
         elif tool_name == "lo_start":
             return self._format_start_output(result)
+        elif tool_name == "lo_update":
+            return self._format_update_output(result)
         else:
             # Fallback to JSON for unknown tools
             return json.dumps(result, indent=2)
@@ -1149,6 +1397,46 @@ Desktop Commander operations from this session:
         output.append("🎯 Ready to continue!")
         
         return "\n".join(output)
+    
+    def _format_update_output(self, result: Dict) -> str:
+        """Format lo_update output for display"""
+        if "error" in result:
+            output = [f"❌ Error: {result['error']}"]
+            
+            if result.get("suggestion"):
+                output.append("")
+                output.append(f"💡 {result['suggestion']}")
+            
+            if result.get("available_projects"):
+                output.append("")
+                output.append("📋 Available projects:")
+                for proj in result["available_projects"]:
+                    output.append(f"  • {proj}")
+            
+            return "\n".join(output)
+        
+        output = []
+        output.append(f"✅ {result.get('message', 'Tier 2 README updated')}")
+        output.append("")
+        
+        stats = result.get('stats', {})
+        output.append("📊 Analysis Summary:")
+        output.append(f"  • Total Sessions: {stats.get('total_sessions', 0)}")
+        output.append(f"  • Knowledge Types: {stats.get('knowledge_types', 0)}")
+        output.append(f"  • Directories Found: {stats.get('directories', 0)}")
+        output.append(f"  • Tech Stack Items: {stats.get('tech_stack', 0)}")
+        output.append("")
+        
+        if result.get('readme_preview'):
+            output.append("📄 README Preview:")
+            output.append("-" * 50)
+            output.append(result['readme_preview'])
+            output.append("-" * 50)
+        
+        output.append("")
+        output.append("💡 Tip: Use 'lo_load project_name' to see the updated Tier 2 context")
+        
+        return "\n".join(output)
 
 
     def handle_mcp_request(self, request: Dict) -> Optional[Dict]:
@@ -1226,6 +1514,17 @@ Desktop Commander operations from this session:
                                 },
                                 "required": ["project_name"]
                             }
+                        },
+                        {
+                            "name": "lo_update",
+                            "description": "Update Tier 2 README from Tier 3 sessions - analyzes all sessions to generate structured documentation",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "project_name": {"type": "string", "description": "Project name (REQUIRED)"}
+                                },
+                                "required": ["project_name"]
+                            }
                         }
                     ]
                 }
@@ -1244,6 +1543,8 @@ Desktop Commander operations from this session:
                     result = self.lo_cont(**arguments)
                 elif tool_name == "lo_start":
                     result = self.lo_start(**arguments)
+                elif tool_name == "lo_update":
+                    result = self.lo_update(**arguments)
                 else:
                     return {
                         "error": {
@@ -1540,10 +1841,12 @@ Desktop Commander operations from this session:
         results = []
         
         try:
-            if HAS_VECTOR_SEARCH and self.embedding_engine and self.vector_search:
-                # REAL VECTOR SEARCH
-                # 1. Generate query embedding
-                query_embedding = self.embedding_engine.generate_embedding(query)
+            if HAS_VECTOR_SEARCH:
+                self._ensure_vector_search()  # Lazy load if needed
+                if self.embedding_engine and self.vector_search:
+                    # REAL VECTOR SEARCH
+                    # 1. Generate query embedding
+                    query_embedding = self.embedding_engine.generate_embedding(query)
                 
                 # 2. Use stored embeddings for efficient search
                 with sqlite3.connect(self.db_path) as conn:
@@ -1651,16 +1954,22 @@ Desktop Commander operations from this session:
         return None
 
     def _load_session_content(self, session_id: str) -> str:
-        """Load session content from file"""
+        """Load session content from database"""
         try:
-            # Look for session file
-            session_files = list(self.base_dir.glob(f"data/sessions/{session_id}_*.md"))
-            if session_files:
-                with open(session_files[0], 'r', encoding='utf-8') as f:
-                    return f.read()
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute(
+                    "SELECT content_text FROM session_metadata WHERE session_id = ?",
+                    (session_id,)
+                )
+                row = cursor.fetchone()
+                if row and row[0]:
+                    return row[0]
+                else:
+                    print(f"Warning: No content found for session {session_id}", file=sys.stderr)
+                    return ""
         except Exception as e:
             print(f"Warning: Could not load session content: {e}", file=sys.stderr)
-        return ""
+            return ""
 
     def _generate_workspace_context(self, dc_operations: List[Dict], project_name: str) -> Dict:
         """Generate workspace context from Desktop Commander operations"""
@@ -1705,6 +2014,145 @@ Desktop Commander operations from this session:
             print(f"Warning: Could not generate workspace context: {e}", file=sys.stderr)
         
         return workspace
+    
+    def _generate_project_description(self, project_name: str, knowledge_types: List, tags: List) -> str:
+        """Generate intelligent project description from sessions"""
+        descriptions = {
+            'logsec': "Model Context Protocol (MCP) session knowledge management system implementing a 3-tier architecture for AI collaboration.",
+            'github': "Git command reference and GitHub integration patterns for efficient repository management.",
+            'lynnvest': "Financial analysis and investment management platform.",
+            'laurion': "Development project with focus on architectural patterns.",
+            'nemesis': "Security and system monitoring toolkit.",
+            'rasputin': "Data processing and automation framework."
+        }
+        
+        base = descriptions.get(project_name.lower(), f"{project_name} development project")
+        
+        if knowledge_types:
+            primary_types = [kt[0] for kt in knowledge_types[:3]]
+            base += f" Primary focus areas: {', '.join(primary_types)}."
+        
+        return base
+    
+    def _detect_project_directories(self, project_name: str) -> List[str]:
+        """Detect project directories from Desktop Commander operations"""
+        directories = set()
+        
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute("""
+                    SELECT DISTINCT path 
+                    FROM dc_operations 
+                    WHERE project_name = ? 
+                    AND (operation_type IN ('read_file', 'write_file', 'edit_block', 'list_directory', 'create_directory'))
+                    ORDER BY timestamp DESC
+                    LIMIT 100
+                """, (project_name,))
+                
+                for row in cursor:
+                    path = row[0]
+                    if path:
+                        # Extract directory from file paths
+                        if os.path.isfile(path):
+                            dir_path = os.path.dirname(path)
+                        else:
+                            dir_path = path
+                        
+                        # Add directory and its parents
+                        while dir_path and dir_path != os.path.dirname(dir_path):
+                            directories.add(dir_path)
+                            # Only go up one level for parent
+                            parent = os.path.dirname(dir_path)
+                            if parent and parent != dir_path:
+                                directories.add(parent)
+                                break
+                
+        except Exception as e:
+            print(f"Warning: Could not detect directories: {e}", file=sys.stderr)
+        
+        # Convert to sorted list and return top directories
+        dir_list = sorted(directories)
+        return dir_list[:5]  # Return top 5 directories
+    
+    def _detect_tech_stack_from_sessions(self, project_name: str) -> List[str]:
+        """Detect technologies from session content"""
+        tech_patterns = {
+            'Python': [r'\.py\b', r'python', r'pip ', r'import '],
+            'JavaScript': [r'\.js\b', r'node', r'npm ', r'const ', r'require\('],
+            'TypeScript': [r'\.ts\b', r'typescript', r'interface ', r'type '],
+            'React': [r'react', r'jsx', r'useState', r'useEffect'],
+            'SQLite': [r'sqlite', r'\.db\b', r'CREATE TABLE', r'INSERT INTO'],
+            'Git': [r'git ', r'\.git', r'commit', r'push origin'],
+            'MCP': [r'mcp', r'model.context.protocol', r'@modelcontextprotocol'],
+            'Docker': [r'docker', r'dockerfile', r'container']
+        }
+        
+        detected = set()
+        
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute("""
+                    SELECT content_text FROM session_metadata
+                    WHERE project_name = ?
+                    LIMIT 20
+                """, (project_name,))
+                
+                for row in cursor.fetchall():
+                    if row[0]:
+                        content = row[0].lower()
+                        for tech, patterns in tech_patterns.items():
+                            if any(re.search(pattern, content, re.IGNORECASE) for pattern in patterns):
+                                detected.add(tech)
+        except:
+            pass
+        
+        if project_name.lower() == 'logsec':
+            detected.update(['Python', 'SQLite', 'MCP'])
+        elif project_name.lower() == 'github':
+            detected.add('Git')
+        
+        return sorted(list(detected))
+    
+    def _detect_github_url(self, project_name: str) -> str:
+        """Try to detect GitHub URL from sessions"""
+        urls = {
+            'logsec': 'https://github.com/LevionLaurion/logsec-mcp-session-knowledge-base',
+            'github': 'https://github.com/LevionLaurion/logsec-mcp-session-knowledge-base'
+        }
+        
+        if project_name.lower() in urls:
+            return urls[project_name.lower()]
+        
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute("""
+                    SELECT content_text FROM session_metadata
+                    WHERE project_name = ? AND content_text LIKE '%github.com%'
+                    LIMIT 5
+                """, (project_name,))
+                
+                for row in cursor.fetchall():
+                    if row[0]:
+                        urls = re.findall(r'https://github\.com/[^\s<>"]+', row[0])
+                        if urls:
+                            return urls[0]
+        except:
+            pass
+        
+        return "Not detected"
+    
+    def _get_all_projects(self) -> List[str]:
+        """Get list of all projects with sessions"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute("""
+                    SELECT DISTINCT project_name 
+                    FROM session_metadata 
+                    ORDER BY project_name
+                """)
+                return [row[0] for row in cursor.fetchall()]
+        except:
+            return []
 
 
 def main():
