@@ -324,7 +324,8 @@ class LogSecCore:
                     "project_context": tier_2_context,  # IMMER dabei für Claude
                     "recent_activity": recent_activity,
                     "theme_overview": theme_overview,
-                    "mode": "summary"
+                    "mode": "summary",
+                    "display_instructions": "IMPORTANT: Please display the numbered documentation list (1-8) exactly as provided. Users can reference docs by number. Show the full structured output, especially the 📄 Documentation section with numbers."
                 }
                 
         except Exception as e:
@@ -332,11 +333,57 @@ class LogSecCore:
             return {"error": str(e)}
             return {"error": str(e)}
     
-    def lo_save(self, content: str, project_name: str = None, session_id: str = None) -> Dict:
-        """Save knowledge - returns structured data"""
+    def lo_save(self, project_name: str = None, content: str = None, session_id: str = None) -> Dict:
+        """Save knowledge - with optional content or context-aware summary"""
         try:
+            # NEUE VALIDIERUNG: Projekt ist immer erforderlich
+            if not project_name:
+                return {"error": "Project name required. Use: lo_save project_name [content]"}
+            
+            # Validate project name (alphanumeric + underscore/dash)
+            if not re.match(r'^[a-zA-Z0-9_-]+$', project_name):
+                return {"error": "Project name must be alphanumeric (plus _ or -)"}
+            
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
+            # Wenn Content übergeben wurde, nutze ihn
+            if content:
+                # Spezifischer Content wurde angegeben
+                # z.B. lo_save logsec "doku" → speichere Dokumentations-bezogene Inhalte
+                content_header = f"# Specific Save: {content} - {timestamp}\n\n"
+                
+                # Hier könnte man basierend auf dem content-Parameter verschiedene Dinge tun
+                if content.lower() in ["doku", "documentation", "docs"]:
+                    content_header += "## Documentation Update\n\n"
+                    content_header += "This save contains documentation-related content.\n\n"
+                elif content.lower() in ["bug", "error", "fix"]:
+                    content_header += "## Bug Fix / Error Solution\n\n"
+                    content_header += "This save contains debugging or error resolution content.\n\n"
+                elif content.lower() in ["feature", "implementation"]:
+                    content_header += "## Feature Implementation\n\n"
+                    content_header += "This save contains feature implementation details.\n\n"
+                else:
+                    content_header += f"## {content}\n\n"
+                
+                # Add context about what was saved
+                content = content_header + f"Content type: {content}\nProject: {project_name}\n\n[Session content related to: {content}]"
+                
+            else:
+                # Keine spezifische Angabe - Request Summary von Claude
+                return {
+                    "success": True,
+                    "action": "request_summary",
+                    "prompt": "Please create a summary of this session including:\n" +
+                             "- Key implementations and fixes\n" +
+                             "- Important technical decisions\n" +
+                             "- Problems solved\n" +
+                             "- Next steps",
+                    "instructions": f"After creating the summary, save it with: lo_save {project_name} \"[your summary]\"",
+                    "project_name": project_name,
+                    "session_id": session_id or self._generate_session_id()
+                }
+            
             session_id = session_id or self._generate_session_id()
-            project_name = project_name or "general"
             
             # Auto-tag content
             tags = self.tagger.generate_tags(content)
@@ -434,6 +481,9 @@ class LogSecCore:
             if not project_name:
                 return {"error": "project_name is required"}
             
+            # NEU: Load Tier 2 context first
+            tier_2_context = self._get_project_context(project_name)
+            
             # 1. Get last session
             last_session = self._get_last_session(project_name)
             if not last_session:
@@ -450,6 +500,7 @@ class LogSecCore:
             parsed = self.parser.parse(session_content)
             
             return {
+                "project_context": tier_2_context,  # NEU: Tier 2 data
                 "session_context": {
                     "session_id": last_session['session_id'],
                     "timestamp": last_session['timestamp'],
@@ -542,6 +593,10 @@ class LogSecCore:
         """Format lo_load output for display - NEW TWO-MODE FORMAT"""
         output = []
         
+        # Check for display instructions
+        if result.get("display_instructions"):
+            output.append(f"[{result['display_instructions']}]\n")
+        
         # Header with project name
         project_name = result.get("project", "Unknown")
         output.append(f"📚 Project Knowledge: {project_name}")
@@ -550,10 +605,27 @@ class LogSecCore:
         if "project_context" in result:
             context = result["project_context"]
             output.append(f"\n🎯 Project Context:")
+            
+            # NEU: Projekt-Grundinfos prominent anzeigen
+            if context.get('project_root'):
+                output.append(f"  📁 Root: {context['project_root']}")
+            if context.get('repository_url'):
+                output.append(f"  🔗 GitHub: {context['repository_url']}")
+            
             output.append(f"  • Description: {context.get('description', 'No description')}")
             output.append(f"  • Phase: {context.get('current_phase', 'Unknown')}")
+            
+            if context.get('key_directories'):
+                output.append(f"  📂 Directories: {', '.join(context['key_directories'])}")
+            
+            if context.get('documentation_files'):
+                output.append(f"  📄 Documentation:")
+                for idx, doc in enumerate(context['documentation_files'][:8], 1):  # Max 8 docs, start at 1
+                    output.append(f"     {idx}. {doc}")
+            
             if context.get('tech_stack'):
                 output.append(f"  • Tech Stack: {', '.join(context['tech_stack'])}")
+            
             output.append(f"  • Total Sessions: {context.get('total_sessions', 0)}")
             if context.get('last_activity'):
                 output.append(f"  • Last Activity: {context['last_activity'][:16]}")
@@ -609,6 +681,19 @@ class LogSecCore:
     def _format_save_output(self, result: Dict) -> str:
         """Format lo_save output for display"""
         output = []
+        
+        # Check if this is a summary request
+        if result.get("action") == "request_summary":
+            output.append("📝 **Session Summary Request**")
+            output.append("")
+            output.append(result.get("prompt", "Please provide a session summary"))
+            output.append("")
+            output.append("---")
+            output.append("")
+            # Der nächste Output sollte die Zusammenfassung sein
+            return "\n".join(output)
+        
+        # Normal save response
         output.append("✅ Knowledge saved successfully!")
         output.append(f"\n📁 Session ID: {result['session_id']}")
         output.append(f"📂 Project: {result.get('project', 'general')}")
@@ -695,13 +780,33 @@ class LogSecCore:
             return f"❌ Error: {result['error']}"
         
         project_name = result.get("project", "Unknown")
-        output.append(f"🚀 Session Continuation Ready: {project_name}")
+        output.append(f"🚀 {project_name.title()} Quick Start")
+        output.append("")
+        
+        # NEU: Tier 2 Context anzeigen
+        if "project_context" in result:
+            ctx = result["project_context"]
+            output.append("📋 Project Information (Tier 2):")
+            
+            if ctx.get("description"):
+                output.append(f"  📝 {ctx['description']}")
+            
+            if ctx.get("current_phase"):
+                output.append(f"  🎯 Phase: {ctx['current_phase']}")
+            
+            if ctx.get("main_directories"):
+                dirs = ctx['main_directories'][:5] if ctx['main_directories'] else []
+                if dirs:
+                    output.append(f"  📂 Directories: {', '.join(dirs)}")
+            
+            output.append("")
         
         # Session Context
         if "session_context" in result:
             context = result["session_context"]
-            output.append(f"\n📋 Last Session Context:")
-            output.append(f"  • Session: {context.get('session_id', 'Unknown')} ({context.get('timestamp', 'Unknown time')[:16]})")
+            output.append("🔄 Last Session:")
+            output.append(f"  • ID: {context.get('session_id', 'N/A')}")
+            output.append(f"  • Time: {context.get('timestamp', 'N/A')[:16] if context.get('timestamp') else 'N/A'}")
             
             if context.get('status'):
                 output.append(f"  • Status: {context['status']}")
@@ -709,31 +814,29 @@ class LogSecCore:
                 output.append(f"  • Position: {context['position']}")
             if context.get('next_steps'):
                 output.append(f"  • Next: {context['next_steps']}")
+            
+            output.append("")
         
-        # Workspace Context
+        # Workspace Context  
         if "workspace_context" in result:
             workspace = result["workspace_context"]
-            output.append(f"\n💻 Workspace Context:")
-            
-            if workspace.get('active_files'):
-                files = workspace['active_files'][:5]  # Show top 5
-                output.append("  • Active Files:")
-                for file in files:
-                    output.append(f"    - {os.path.basename(file)}")
-            
-            if workspace.get('working_directories'):
-                dirs = workspace['working_directories'][:3]  # Show top 3
-                output.append("  • Working Directories:")
-                for dir_path in dirs:
-                    output.append(f"    - {os.path.basename(dir_path)}")
-            
-            if workspace.get('last_commands'):
-                commands = workspace['last_commands'][:3]  # Show last 3
-                output.append("  • Last Commands:")
-                for cmd in commands:
-                    output.append(f"    - {cmd[:50]}{'...' if len(cmd) > 50 else ''}")
+            if workspace and isinstance(workspace, dict):
+                for proj, data in workspace.items():
+                    if proj == project_name:  # Only show current project
+                        output.append("📁 Workspace Context:")
+                        
+                        if data.get('files'):
+                            output.append("  🗄️ Recent Files:")
+                            for f in sorted(list(data['files']))[:5]:
+                                output.append(f"    • {f}")
+                        
+                        if data.get('directories'):
+                            output.append("  📂 Working Directories:")
+                            for d in sorted(list(data['directories']))[:3]:
+                                output.append(f"    • {d}")
         
-        output.append("\n✅ Ready to continue where you left off!")
+        output.append("")
+        output.append("🎯 Ready to continue!")
         return "\n".join(output)
 
 
@@ -779,15 +882,15 @@ class LogSecCore:
                         },
                         {
                             "name": "lo_save",
-                            "description": "Save knowledge with auto-tagging and classification",
+                            "description": "Save content or current session to project",
                             "inputSchema": {
                                 "type": "object",
                                 "properties": {
-                                    "content": {"type": "string", "description": "Content to save"},
                                     "project_name": {"type": "string", "description": "Project name (REQUIRED)"},
+                                    "content": {"type": "string", "description": "Content to save (optional - auto-generates if not provided)"},
                                     "session_id": {"type": "string", "description": "Session ID (optional)"}
                                 },
-                                "required": ["content", "project_name"]
+                                "required": ["project_name"]
                             }
                         },
                         {
@@ -882,18 +985,21 @@ class LogSecCore:
             # Get project statistics
             stats = self._get_project_stats(project_name)
             
-            # Get main directories (if available)
-            directories = self._get_project_directories(project_name)
+            # Get main directories (if available) - from README or detect
+            directories = readme.get('key_directories', []) or self._get_project_directories(project_name)
             
             return {
                 "name": project_name,
                 "description": readme.get('description', f"{project_name} project"),
                 "current_phase": readme.get('phase', 'In development'),
+                "project_root": readme.get('project_root', ''),  
+                "repository_url": readme.get('repository_url', ''),  
                 "tech_stack": readme.get('tech_stack', []),
                 "key_components": readme.get('components', []),
+                "key_directories": directories[:5],  
+                "documentation_files": readme.get('documentation_files', []),  # NEU
                 "total_sessions": stats.get('total_sessions', 0),
-                "last_activity": self._get_last_activity(project_name),
-                "main_directories": directories[:5]  # Top 5 directories
+                "last_activity": self._get_last_activity(project_name)
             }
         except Exception as e:
             print(f"Warning: Could not get project context: {e}", file=sys.stderr)
@@ -914,17 +1020,93 @@ class LogSecCore:
             # Try to get existing README
             readme_data = self.readme_manager.get_readme(project_name)
             if readme_data and readme_data.get('content'):
-                return {
-                    'description': readme_data.get('description', ''),
-                    'phase': readme_data.get('phase', ''),
-                    'tech_stack': readme_data.get('tech_stack', []),
-                    'components': readme_data.get('components', [])
-                }
+                # Parse README content for structured data
+                content = readme_data.get('content', '')
+                parsed = self._parse_readme_content(content)
+                return parsed
         except:
             pass
         
         # Generate basic README from sessions
         return self._generate_basic_readme(project_name)
+    
+    def _parse_readme_content(self, content: str) -> Dict:
+        """Parse README content to extract structured data"""
+        parsed = {
+            'description': '',
+            'phase': 'Active Development', 
+            'project_root': '',
+            'repository_url': '',
+            'tech_stack': [],
+            'components': [],
+            'key_directories': [],
+            'documentation_files': []  # NEU
+        }
+        
+        # Extract from README format
+        lines = content.split('\n')
+        
+        for i, line in enumerate(lines):
+            # Project Root
+            if 'Project Root' in line and ':' in line:
+                parsed['project_root'] = line.split(':', 1)[1].strip().strip('*`')
+            
+            # GitHub URL
+            elif 'GitHub' in line and 'http' in line:
+                if ':' in line:
+                    url = line.split(':', 1)[1].strip().strip('*`')
+                    if 'http' in url:
+                        parsed['repository_url'] = 'https:' + url.split('https:')[1] if 'https:' in url else url
+            
+            # Status/Phase
+            elif 'Status' in line and ':' in line:
+                parsed['phase'] = line.split(':', 1)[1].strip().strip('*`')
+            
+            # Description (usually after ## Description)
+            elif line.strip() == '## Description' and i + 1 < len(lines):
+                parsed['description'] = lines[i + 1].strip()
+            
+            # Tech Stack
+            elif line.strip() == '## Tech Stack' and i + 1 < len(lines):
+                j = i + 1
+                while j < len(lines) and lines[j].strip().startswith('-'):
+                    tech = lines[j].strip().lstrip('- ').strip()
+                    if tech:
+                        parsed['tech_stack'].append(tech)
+                    j += 1
+        
+        # Extract directories from structure section
+        in_structure = False
+        for line in lines:
+            if '## Project Structure' in line:
+                in_structure = True
+                continue
+            elif in_structure and line.strip().startswith('##'):
+                break
+            elif in_structure and '`' in line and '/' in line:
+                # Extract directory name
+                import re
+                match = re.search(r'`([^`]+)/`', line)
+                if match:
+                    parsed['key_directories'].append(match.group(1))
+        
+        # NEU: Extract documentation files
+        in_docs = False
+        for line in lines:
+            if '## Documentation' in line and 'Files' in line:
+                in_docs = True
+                continue
+            elif in_docs and line.strip().startswith('##'):
+                break  
+            elif in_docs and line.strip().startswith('-'):
+                # Extract .md files
+                import re
+                # Match patterns like `README.md` or `docs/FILE.md`
+                matches = re.findall(r'`([^`]+\.md)`', line)
+                for match in matches:
+                    parsed['documentation_files'].append(match)
+        
+        return parsed
 
     def _generate_basic_readme(self, project_name: str) -> Dict:
         """Generate basic README from existing sessions"""
