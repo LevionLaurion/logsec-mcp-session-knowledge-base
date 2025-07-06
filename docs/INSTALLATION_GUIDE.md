@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Python 3.8 or higher
+- Python 3.9 or higher
 - Claude Desktop
 - Desktop Commander MCP server (for DC operations tracking)
 
