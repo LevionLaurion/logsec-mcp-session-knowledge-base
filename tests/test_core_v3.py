@@ -4,7 +4,53 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 import json
 import time
+import tempfile
+from pathlib import Path
 from logsec_core_v3 import LogSecCore
+
+def setup_test_environment():
+    """Setup test environment with proper paths"""
+    # Create a temporary directory for tests
+    test_dir = tempfile.mkdtemp(prefix="logsec_test_")
+    
+    # Create subdirectories
+    db_dir = Path(test_dir) / "database"
+    projects_dir = Path(test_dir) / "projects"
+    templates_dir = Path(test_dir) / "templates"
+    
+    db_dir.mkdir(parents=True, exist_ok=True)
+    projects_dir.mkdir(parents=True, exist_ok=True)
+    templates_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Create test config
+    config = {
+        "db_path": str(db_dir / "test.db"),
+        "projects_dir": str(projects_dir),
+        "templates_dir": str(templates_dir)
+    }
+    
+    # Write config
+    config_dir = Path(test_dir) / "src" / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    config_path = config_dir / "config.json"
+    
+    with open(config_path, 'w') as f:
+        json.dump(config, f)
+    
+    # Monkey patch the config path in LogSecCore
+    original_load_config = LogSecCore._load_config
+    
+    def patched_load_config(self):
+        try:
+            with open(config_path, 'r') as f:
+                return json.load(f)
+        except:
+            return config
+    
+    LogSecCore._load_config = patched_load_config
+    
+    return test_dir
+
 
 def test_lo_save():
     """Test saving with auto-tagging and classification"""
@@ -43,8 +89,7 @@ Creates a new user.
     "email": "string"
 }
 ```
-"""
-    
+"""    
     result = core.lo_save(
         content=test_content,
         project_name="test_project",
@@ -75,7 +120,8 @@ def test_lo_load():
     
     if 'response' in result:
         print("Load successful!")
-        print(f"Response: {result['response']}")
+        # Don't print the full response to avoid encoding issues
+        print("Response received (length: {})".format(len(result['response'])))
         assert True  # Test passed
     elif 'error' in result:
         print(f"Error: {result['error']}")
@@ -98,7 +144,7 @@ def test_lo_cont():
     
     if 'response' in result:
         print("Continuation created successfully!")
-        print(f"Response: {result['response']}")
+        print("Response received (length: {})".format(len(result['response'])))
         assert True  # Test passed
     elif 'error' in result:
         print(f"Error: {result['error']}")
@@ -170,36 +216,47 @@ def test_mcp_protocol():
 
 
 if __name__ == "__main__":
-    # Run individual tests
-    tests = [
-        ("Save functionality", test_lo_save),
-        ("Load functionality", test_lo_load),
-        ("Continuation functionality", test_lo_cont),
-        ("MCP protocol", test_mcp_protocol)
-    ]
+    # Setup test environment
+    test_dir = setup_test_environment()
     
-    print("[TEST] LogSec Core v3 Test Suite")
-    print("=" * 50)
-    
-    passed = 0
-    failed = 0
-    
-    for name, test_func in tests:
-        try:
-            if test_func():
+    try:
+        # Run individual tests
+        tests = [
+            ("Save functionality", test_lo_save),
+            ("Load functionality", test_lo_load),
+            ("Continuation functionality", test_lo_cont),
+            ("MCP protocol", test_mcp_protocol)
+        ]
+        
+        print("[TEST] LogSec Core v3 Test Suite")
+        print("=" * 50)
+        
+        passed = 0
+        failed = 0
+        
+        for name, test_func in tests:
+            try:
+                test_func()
                 print(f"\n[PASS] {name}: PASSED")
                 passed += 1
-            else:
-                print(f"\n[FAIL] {name}: FAILED")
+            except AssertionError as e:
+                print(f"\n[FAIL] {name}: FAILED - {e}")
                 failed += 1
-        except Exception as e:
-            print(f"\n[ERROR] {name}: ERROR - {e}")
-            import traceback
-            traceback.print_exc()
-            failed += 1
-    
-    print("\n" + "=" * 50)
-    print(f"Results: {passed} passed, {failed} failed")
-    
-    # Exit with proper code for CI/CD
-    sys.exit(0 if failed == 0 else 1)
+            except Exception as e:
+                print(f"\n[ERROR] {name}: ERROR - {e}")
+                import traceback
+                traceback.print_exc()
+                failed += 1
+        
+        print("\n" + "=" * 50)
+        print(f"Results: {passed} passed, {failed} failed")
+        
+        # Exit with proper code for CI/CD
+        sys.exit(0 if failed == 0 else 1)
+    finally:
+        # Cleanup
+        import shutil
+        try:
+            shutil.rmtree(test_dir)
+        except:
+            pass

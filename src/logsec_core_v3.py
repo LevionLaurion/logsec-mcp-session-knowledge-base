@@ -61,8 +61,8 @@ class LogSecCore:
         self.templates = self._load_templates()
         self.db_path = self.config['db_path']
         
-        # Skip DB init - we use existing phase3.db
-        # self._init_db()
+        # Initialize DB if it doesn't exist
+        self._init_db()
         
         # Simple search engine
         self.search = SimpleVectorSearch(self.db_path)
@@ -108,16 +108,20 @@ class LogSecCore:
             print(f"DB init error: {e}", file=sys.stderr)    
     def _load_config(self) -> Dict:
         """Load config from JSON"""
-        config_path = "C:\\LogSec\\src\\config\\config.json"
+        # Make path cross-platform
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        config_path = os.path.join(script_dir, "config", "config.json")
+        
         try:
             with open(config_path, 'r') as f:
                 return json.load(f)
         except:
-            # Default config
+            # Default config with cross-platform paths
+            base_dir = os.path.dirname(script_dir)
             return {
-                "db_path": "C:\\LogSec\\data\\database\\logsec_phase3.db",
-                "projects_dir": "C:\\LogSec\\data\\projects",
-                "templates_dir": "C:\\LogSec\\data\\templates"
+                "db_path": os.path.join(base_dir, "data", "database", "logsec_phase3.db"),
+                "projects_dir": os.path.join(base_dir, "data", "projects"),
+                "templates_dir": os.path.join(base_dir, "data", "templates")
             }
     
     def _load_templates(self) -> Dict:
