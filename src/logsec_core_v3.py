@@ -30,9 +30,9 @@ class SimpleVectorSearch:
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.execute("""
-                    SELECT session_id, content_text, knowledge_type, timestamp
+                    SELECT session_id, content, knowledge_type, timestamp
                     FROM session_metadata 
-                    WHERE project_name = ? AND content_text LIKE ?
+                    WHERE project_name = ? AND content LIKE ?
                     ORDER BY timestamp DESC
                     LIMIT ?
                 """, (project_name, f"%{query}%", limit))
@@ -161,7 +161,7 @@ class LogSecCore:
             with sqlite3.connect(self.db_path) as conn:
                 conn.execute("""
                     INSERT INTO session_metadata 
-                    (session_id, project_name, knowledge_type, content_text, tags, timestamp)
+                    (session_id, project_name, knowledge_type, content, tags, timestamp)
                     VALUES (?, ?, ?, ?, ?, ?)
                 """, (
                     session_id,
