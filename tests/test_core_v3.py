@@ -3,6 +3,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 import json
+import time
 from logsec_core_v3 import LogSecCore
 
 def test_lo_save():
@@ -47,20 +48,20 @@ Creates a new user.
     result = core.lo_save(
         content=test_content,
         project_name="test_project",
-        session_id="test_api_doc_001"
+        session_id=f"test_api_doc_{int(time.time())}"  # Unique ID
     )
     
     # Fixed: Check for 'response' key instead of 'status'
     if 'response' in result:
         print("Save successful!")
         print(f"Response: {result['response']}")
-        return True
+        assert True  # Test passed
     elif 'error' in result:
         print(f"Error: {result['error']}")
-        return False
+        assert False, f"Save failed: {result['error']}"
     else:
         print(f"Unexpected result: {result}")
-        return False
+        assert False, f"Unexpected result format: {result}"
 
 
 def test_lo_load():
@@ -75,13 +76,13 @@ def test_lo_load():
     if 'response' in result:
         print("Load successful!")
         print(f"Response: {result['response']}")
-        return True
+        assert True  # Test passed
     elif 'error' in result:
         print(f"Error: {result['error']}")
-        return False
+        assert False, f"Load failed: {result['error']}"
     else:
         print(f"Unexpected result: {result}")
-        return False
+        assert False, f"Unexpected result format: {result}"
 
 def test_lo_cont():
     """Test continuation parsing"""
@@ -98,13 +99,13 @@ def test_lo_cont():
     if 'response' in result:
         print("Continuation created successfully!")
         print(f"Response: {result['response']}")
-        return True
+        assert True  # Test passed
     elif 'error' in result:
         print(f"Error: {result['error']}")
-        return False
+        assert False, f"Continuation failed: {result['error']}"
     else:
         print(f"Unexpected result: {result}")
-        return False
+        assert False, f"Unexpected result format: {result}"
 
 
 def test_mcp_protocol():
@@ -131,7 +132,7 @@ def test_mcp_protocol():
         "id": 0
     }
     
-    init_response = core.handle_request(init_request)
+    init_response = core.handle_mcp_request(init_request)
     print(f"Initialize response: {init_response}")
     
     # Test tools/list
@@ -141,7 +142,7 @@ def test_mcp_protocol():
         "id": 1
     }
     
-    list_response = core.handle_request(list_request)
+    list_response = core.handle_mcp_request(list_request)
     print(f"Available tools: {len(list_response.get('result', {}).get('tools', []))}")
     
     # Test tools/call
@@ -149,7 +150,7 @@ def test_mcp_protocol():
         "jsonrpc": "2.0",
         "method": "tools/call",
         "params": {
-            "name": "logsec:lo_save",
+            "name": "lo_save",  # Fixed: no prefix
             "arguments": {
                 "content": "Test content for MCP",
                 "project_name": "mcp_test"
@@ -158,14 +159,14 @@ def test_mcp_protocol():
         "id": 2
     }
     
-    call_response = core.handle_request(call_request)
+    call_response = core.handle_mcp_request(call_request)
     print(f"MCP call response: {call_response}")
     
     # Check if we got a valid response
     if 'result' in call_response:
-        return True
+        assert True  # Test passed
     else:
-        return False
+        assert False, f"MCP call failed: {call_response}"
 
 
 if __name__ == "__main__":
